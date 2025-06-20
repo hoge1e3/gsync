@@ -1,0 +1,9 @@
+{
+    "name": "@acepad/git",
+    "scripts": {
+        "test": "run test/test-git.js"
+    },
+    "main": "git.js",
+    "version": "1.0.0",
+    "type": "module"
+}

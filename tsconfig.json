@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+      "sourceMap": true,
+      "target": "ES2022",
+      "lib": ["es2021"],
+      "module": "esnext",
+      //"allowImportingTsExtensions": true,
+      //"noEmit": true,
+      "moduleResolution": "node",
+      "declaration": true,
+      "strict": true,
+      "outDir":"./js",
+      "allowSyntheticDefaultImports":true
+    },
+    "include": ["src","test"]
+  }
