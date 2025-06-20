@@ -1,9 +1,14 @@
 {
     "name": "@acepad/git",
     "scripts": {
-        "test": "run test/test-git.js"
+        "build": "npx tsc",
+        "test": "node js/test/test-git.js"
     },
     "main": "git.js",
     "version": "1.0.0",
-    "type": "module"
+    "type": "module",
+    "devDependencies": {
+        "@types/node": "^24.0.3",
+        "typescript": "^5.8.3"
+    }
 }

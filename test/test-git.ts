@@ -2,5 +2,7 @@ import {Repo} from "../src/git.js";
 import * as assert from "assert";
 export async function main(){
     const repo=new Repo(".git");
-    
+    const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
+    console.log(obj.type, obj.content);
 }    
+main();
