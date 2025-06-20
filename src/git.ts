@@ -20,6 +20,7 @@ export type CommitEntry = {
   committer: string;
   message: string;
 };
+export type GitObject={ type: string; hash: string, content: Buffer };
 export class Repo {
   constructor(public gitDir: string) {}
 
@@ -29,7 +30,7 @@ export class Repo {
     return file;
   }
 
-  async readObject(hash: string): Promise<{ type: string; content: Buffer }> {
+  async readObject(hash: string): Promise<GitObject> {
     const filePath = this.getObjectPath(hash);
     const compressed = await fs.promises.readFile(filePath);
     const data = await inflate(compressed);
@@ -44,7 +45,7 @@ export class Repo {
       throw new Error(`Size mismatch: expected ${size}, got ${content.length}`);
     }
 
-    return { type, content };
+    return { type, content , hash};
   }
 
   async writeObject(type: string, content: Buffer): Promise<string> {
@@ -181,4 +182,35 @@ export class Repo {
   
     return Buffer.from(lines.join('\n'), 'utf-8');
   }
+  async readHead(branch: string): Promise<string> {
+    const refPath = path.join(this.gitDir, "refs/heads", branch);
+    const data = await fs.promises.readFile(refPath, 'utf-8');
+    const hash = data.trim();
+
+    if (!/^[0-9a-f]{40}$/.test(hash)) {
+      throw new Error(`Invalid ref content in ${branch}: ${hash}`);
+    }
+    return hash;
+  }
+  async *traverseTree(
+    entries: TreeEntry[],
+    prefix = ''
+  ): AsyncGenerator<{ path: string; hash: string; content?: Buffer }> {
+    for (const entry of entries) {
+      const fullPath = path.posix.join(prefix, entry.name);
+      const { type, content } = await this.readObject(entry.hash);
+
+      if (type === 'blob') {
+        yield { path: fullPath, hash: entry.hash, content };
+      } else if (type === 'tree') {
+        yield { path: fullPath, hash: entry.hash };
+        const childEntries = await this.readTree(entry.hash);
+        yield* this.traverseTree(childEntries, fullPath); // 再帰呼び出し
+      } else {
+        // 他の型（e.g. commit）はスキップまたはエラー
+        throw new Error(`Unexpected object type in tree: ${type}`);
+      }
+    }
+  }
+
 }
