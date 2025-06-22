@@ -5,6 +5,10 @@ import zlib from 'zlib';
 import crypto from 'crypto';
 import { promisify } from 'util';
 
+type ObjectType="commit" | "tree" | "blob" | "tag";
+function isObjectType(type: string): type is ObjectType {
+  return ['commit', 'tree', 'blob', 'tag'].includes(type);
+}
 const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);
 // src/repo.ts の先頭付近
@@ -20,7 +24,7 @@ export type CommitEntry = {
   committer: string;
   message: string;
 };
-export type GitObject={ type: string; hash: string, content: Buffer };
+export type GitObject={ type: ObjectType; hash: string, content: Buffer };
 export class Repo {
   constructor(public gitDir: string) {}
 
@@ -44,11 +48,13 @@ export class Repo {
     if (content.length !== size) {
       throw new Error(`Size mismatch: expected ${size}, got ${content.length}`);
     }
-
+    if (!isObjectType(type)) {
+      throw new Error(`Unknown object type: ${type}`);
+    }
     return { type, content , hash};
   }
 
-  async writeObject(type: string, content: Buffer): Promise<string> {
+  async writeObject(type: ObjectType, content: Buffer): Promise<string> {
     const header = `${type} ${content.length}\0`;
     const store = Buffer.concat([Buffer.from(header), content]);
     const hash = crypto.createHash('sha1').update(store).digest('hex');
@@ -182,6 +188,9 @@ export class Repo {
   
     return Buffer.from(lines.join('\n'), 'utf-8');
   }
+  async writeCommit(entry: CommitEntry) {
+    return await this.writeObject("commit", this.encodeCommit(entry));
+  }
   async readHead(branch: string): Promise<string> {
     const refPath = path.join(this.gitDir, "refs/heads", branch);
     const data = await fs.promises.readFile(refPath, 'utf-8');
@@ -211,6 +220,85 @@ export class Repo {
         throw new Error(`Unexpected object type in tree: ${type}`);
       }
     }
+  }
+  async mergeBranches(into: string, from: string, author: string): Promise<string> {
+    const baseCommitHash = await this.readHead(into);
+    const mergeCommitHash = await this.readHead(from);
+
+    const baseCommit = await this.readCommit(baseCommitHash);
+    const mergeCommit = await this.readCommit(mergeCommitHash);
+
+    const baseTree = await this.readTree(baseCommit.tree);
+    const mergeTree = await this.readTree(mergeCommit.tree);
+
+    // ★ 単純なファイル名ベースのユニオン（重複は base を優先）
+    const mergedMap = new Map<string, TreeEntry>();
+    for (const e of mergeTree) mergedMap.set(e.name, e);
+    for (const e of baseTree) mergedMap.set(e.name, e); // base 優先
+
+    const mergedEntries = Array.from(mergedMap.values());
+    const mergedTreeHash = await this.writeTree(mergedEntries);
+
+    const now = Math.floor(Date.now() / 1000);
+    const info = `${author} ${now} +0000`;
+
+    const mergedCommit:CommitEntry = {
+      tree: mergedTreeHash,
+      parents: [baseCommitHash, mergeCommitHash],
+      author: info,
+      committer: info,
+      message: `Merge branch '${from}' into '${into}'`
+    };
+
+    const newCommitHash = await this.writeCommit(mergedCommit);
+
+    // refs/heads/baseBranch を更新
+    await this.updateRef(path.join('refs', 'heads', into), newCommitHash);
+
+    return newCommitHash;
+  }
+  async updateRef(refPath: string, hash: string): Promise<void> {
+    const fullPath = path.join(this.gitDir, refPath);
+    const dirPath = path.dirname(fullPath);
+    await fs.promises.mkdir(dirPath, { recursive: true });
+    await fs.promises.writeFile(fullPath, hash);
+  }
+  async findMergeBase(commitHashA: string, commitHashB: string): Promise<string | null> {
+    // visitedA と visitedB に各ブランチの履歴を記録
+    const visitedA = new Set<string>();
+    const visitedB = new Set<string>();
+
+    // 両方の探索キュー
+    const queueA = [commitHashA];
+    const queueB = [commitHashB];
+
+    // 両方向から探索（BFS）
+    while (queueA.length > 0 || queueB.length > 0) {
+      // ブランチAから
+      if (queueA.length > 0) {
+        const hash = queueA.shift()!;
+        if (visitedB.has(hash)) return hash;
+        if (visitedA.has(hash)) continue;
+
+        visitedA.add(hash);
+        const commit = await this.readCommit(hash);
+        queueA.push(...commit.parents);
+      }
+
+      // ブランチBから
+      if (queueB.length > 0) {
+        const hash = queueB.shift()!;
+        if (visitedA.has(hash)) return hash;
+        if (visitedB.has(hash)) continue;
+
+        visitedB.add(hash);
+        const commit = await this.readCommit(hash);
+        queueB.push(...commit.parents);
+      }
+    }
+
+    // 共通祖先がない（ありえないが保険）
+    return null;
   }
 
 }
