@@ -4,14 +4,14 @@ export async function main(){
     const repo=new Repo(asPath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
     //console.log(obj.type, obj.content);
-    const head=await repo.readHead(asBranchName("main"));
-    console.log(head);
-    const commit=await repo.readCommit(head);
-    console.log(commit);
-    const tree=await repo.readTree(commit.tree);
-    console.log(tree);
+    const curCommitHash=await repo.readHead(asBranchName("main"));
+    console.log(curCommitHash);
+    const curCommit=await repo.readCommit(curCommitHash);
+    console.log(curCommit);
+    const curTree=await repo.readTree(curCommit.tree);
+    console.log(curTree);
     console.log("---last commit ---");
-    for await (let e of repo.traverseTree(tree)) {
+    for await (let e of repo.traverseTree(curTree)) {
         console.log(e.path, e.hash, await newLineType(e.path, e.hash));
         
     }
@@ -20,15 +20,15 @@ export async function main(){
     for await (let e of repo.traverseTree(bt)) {
         console.log(e.path, e.hash, await newLineType(e.path, e.hash));
     }
-    const newCommitHash=await repo.writeTree(bt);
-    const newCommit=await repo.writeCommit({
+    const newCommitTreeHash=await repo.writeTree(bt);
+    const newCommitHash=await repo.writeCommit({
         author: new Author("hoge1e3","test@example.com"),
         committer: new Author("hoge1e3","test@example.com"),
-        parents: [head],
+        parents: [curCommitHash],
         message: "Change test-git.js",
-        tree: newCommitHash
+        tree: newCommitTreeHash
     });
-    await repo.updateHead(asBranchName("main"), newCommit);
+    await repo.updateHead(asBranchName("main"), newCommitHash);
 
     async function newLineType(path:RelPath, hash:Hash) {
         if (path.match(/\.(js|ts|json)$/)) {
