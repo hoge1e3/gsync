@@ -3,55 +3,117 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import crypto from 'crypto';
+import ignore from 'ignore';
+
 import { diff, DiffEntry, promisify } from 'util';
 
-type Conflict = { path: string; base?: string; a?: string; b?: string };
+const SymHash=Symbol("hash");
+type Hash=string&{[SymHash]:undefined};
+function isHash(s: string): s is Hash {
+  return /^[0-9a-f]{40}$/.test(s);  
+}
+export function asHash(s:string) {
+  if (!isHash(s)) throw new Error(`${s} is not a hash`);
+  return s;
+}
+//const SymMode=Symbol("mode");
+type Mode="40000"|"100644";
+function isMode(s: string): s is Mode {
+  return /^[0-9]+$/.test(s);  
+}
+export function asMode(s: string) {
+  if (!isMode(s)) throw new Error(`${s} is not a mode`);
+  return s;
+}
+
+const SymRelPath=Symbol("path");
+type RelPath=string&{[SymRelPath]:undefined};
+function isRelPath(s:string): s is RelPath{
+  return true;
+}
+const SymAbsPath=Symbol("path");
+type AbsPath=string&{[SymAbsPath]:undefined};
+function isAbsPath(s:string): s is AbsPath{
+  return true;
+}
+type Path=RelPath|AbsPath;
+function isPath(s:string): s is Path {
+  return isAbsPath(s) || isRelPath(s);
+}
+export function asPath(s:string) {
+  if (!isPath(s)) throw new Error(`${s} is not a path`);
+  return s;
+}
+export function asRelPath(s:string) {
+  if (!isRelPath(s)) throw new Error(`${s} is not a relative path`);
+  return s;
+}
+const SymFilename=Symbol("filename");
+type Filename=string&{[SymFilename]:undefined};
+function isFilename(s:string): s is Filename{
+  return true;
+}
+export function asFilename(s:string) {
+  if (!isFilename(s)) throw new Error(`${s} is not a filename`);
+  return s;
+}
+const SymBranch=Symbol("branch");
+function isBranchName(s:string): s is BranchName{
+  return true;
+}
+export function asBranchName(s:string) {
+  if (!isBranchName(s)) throw new Error(`${s} is not a branch name`);
+  return s;
+}
+type BranchName=string&{[SymBranch]:undefined};
+
+type Conflict = { path: Path; base?: Hash; a?: Hash; b?: Hash };
 type ObjectType = "commit" | "tree" | "blob" | "tag";
 function isObjectType(type: string): type is ObjectType {
   return ['commit', 'tree', 'blob', 'tag'].includes(type);
 }
 type TreeDiffEntry = {
-  path: string;
+  path: Path;
   type: 'added' | 'deleted' | 'modified';
-  oldHash?: string;
-  newHash?: string;
+  oldHash?: Hash;
+  newHash?: Hash;
 };
 
 const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);
 // src/repo.ts の先頭付近
 export type TreeEntry = {
-  mode: string;         // e.g. "100644" or "40000"
-  name: string;         // ファイル名 or ディレクトリ名
-  hash: string;         // SHA-1 ハッシュ（hex文字列）
+  mode: Mode;         // e.g. "100644" or "40000"
+  name: Filename;         // ファイル名 or ディレクトリ名
+  hash: Hash;         // SHA-1 ハッシュ（hex文字列）
 };
 export type CommitEntry = {
-  tree: string;
-  parents: string[];            // ← 配列に変更（複数 parent 対応）
+  tree: Hash;
+  parents: Hash[];            // ← 配列に変更（複数 parent 対応）
   author: string;
   committer: string;
   message: string;
 };
-export type GitObject = { type: ObjectType; hash: string, content: Buffer };
+export type GitObject = { type: ObjectType; hash: Hash, content: Buffer };
 export class Repo {
-  constructor(public gitDir: string) { }
+  constructor(public gitDir: Path) { }
 
-  private getObjectPath(hash: string): string {
+  private getObjectPath(hash: Hash): Path {
     const dir = path.join(this.gitDir, 'objects', hash.slice(0, 2));
     const file = path.join(dir, hash.slice(2));
-    return file;
+    return file as Path;
   }
 
-  async readObject(hash: string): Promise<GitObject> {
+  async readObject(hash: Hash): Promise<GitObject> {
     const filePath = this.getObjectPath(hash);
     const compressed = await fs.promises.readFile(filePath);
     const data = await inflate(compressed);
 
     const nullIndex = data.indexOf(0);
-    const header = data.slice(0, nullIndex).toString();
+    const header = data.subarray(0, nullIndex).toString();
     const [type, sizeStr] = header.split(' ');
     const size = parseInt(sizeStr, 10);
-    const content = data.slice(nullIndex + 1);
+    const content = data.subarray(nullIndex + 1);
 
     if (content.length !== size) {
       throw new Error(`Size mismatch: expected ${size}, got ${content.length}`);
@@ -62,10 +124,10 @@ export class Repo {
     return { type, content, hash };
   }
 
-  async writeObject(type: ObjectType, content: Buffer): Promise<string> {
+  async writeObject(type: ObjectType, content: Buffer): Promise<Hash> {
     const header = `${type} ${content.length}\0`;
     const store = Buffer.concat([Buffer.from(header), content]);
-    const hash = crypto.createHash('sha1').update(store).digest('hex');
+    const hash = asHash( crypto.createHash('sha1').update(store).digest('hex') );
 
     const filePath = this.getObjectPath(hash);
     const dirPath = path.dirname(filePath);
@@ -77,20 +139,20 @@ export class Repo {
     return hash;
   }
 
-  hashObject(type: string, content: Buffer): string {
+  hashObject(type: ObjectType, content: Buffer): Hash {
     const header = `${type} ${content.length}\0`;
     const store = Buffer.concat([Buffer.from(header), content]);
-    return crypto.createHash('sha1').update(store).digest('hex');
+    return asHash( crypto.createHash('sha1').update(store).digest('hex') );
   }
 
-  async readBlobAsText(hash: string): Promise<string> {
+  async readBlobAsText(hash: Hash): Promise<string> {
     const { type, content } = await this.readObject(hash);
     if (type !== 'blob') {
       throw new Error(`Expected blob, got ${type}`);
     }
     return content.toString('utf-8');
   }
-  async readTree(hash: string): Promise<TreeEntry[]> {
+  async readTree(hash: Hash): Promise<TreeEntry[]> {
     const { type, content } = await this.readObject(hash);
     if (type !== 'tree') {
       throw new Error(`Expected tree, got ${type}`);
@@ -102,15 +164,15 @@ export class Repo {
     while (offset < content.length) {
       // mode（ASCIIでspace区切り）
       const spaceIdx = content.indexOf(0x20, offset);
-      const mode = content.slice(offset, spaceIdx).toString();
+      const mode = asMode( content.subarray(offset, spaceIdx).toString());
 
       // name（null文字まで）
       const nullIdx = content.indexOf(0x00, spaceIdx);
-      const name = content.slice(spaceIdx + 1, nullIdx).toString();
+      const name = asFilename( content.subarray(spaceIdx + 1, nullIdx).toString() );
 
       // SHA-1（20バイトのバイナリ）
-      const hashBuffer = content.slice(nullIdx + 1, nullIdx + 21);
-      const hash = hashBuffer.toString('hex');
+      const hashBuffer = content.subarray(nullIdx + 1, nullIdx + 21);
+      const hash = asHash( hashBuffer.toString('hex'));
 
       entries.push({ mode, name, hash });
       offset = nullIdx + 21; // 次のエントリへ
@@ -137,11 +199,62 @@ export class Repo {
 
     return Buffer.concat(buffers);
   }
-  async writeTree(entries: TreeEntry[]): Promise<string> {
+  async writeTree(entries: TreeEntry[]): Promise<Hash> {
     const content = this.encodeTree(entries);
     return await this.writeObject('tree', content);
   }
-  async readCommit(hash: string): Promise<CommitEntry> {
+
+  async buildTreeFromWorkingDir(): Promise<TreeEntry[]> {
+    const workingDir = asPath( path.resolve(this.gitDir, '..') );
+    const ig = ignore();
+
+    // .gitignore を読み込む（存在する場合）
+    const gitignorePath = path.join(workingDir, '.gitignore');
+    try {
+      const ignoreContent = await fs.promises.readFile(gitignorePath, 'utf8');
+      ig.add(ignoreContent);
+    } catch {
+      // .gitignore がない場合は無視
+    }
+
+    const walk = async (dir: Path): Promise<TreeEntry[]> => {
+      const entries: TreeEntry[] = [];
+      const files = await fs.promises.readdir(dir, { withFileTypes: true });
+
+      for (const file of files) {
+        const name = asFilename(file.name);
+        const relPath = path.relative(workingDir, path.join(dir, name));
+
+        // 除外対象（.gitignore + .git フォルダ）をスキップ
+        if (
+          ig.ignores(relPath) ||
+          relPath === '.git' ||
+          relPath.startsWith('.git' + path.sep)
+        ) {
+          continue;
+        }
+
+        const fullPath = asPath( path.join(dir, name) );
+        const stat = await fs.promises.stat(fullPath);
+
+        if (file.isFile()) {
+          const content = await fs.promises.readFile(fullPath);
+          const hash = await this.writeObject('blob', content);
+          entries.push({ mode: '100644', name, hash });
+        } else if (file.isDirectory()) {
+          const childEntries = await walk(fullPath);
+          const treeHash = await this.writeTree(childEntries);
+          entries.push({ mode: '40000', name, hash: treeHash });
+        }
+      }
+
+      return entries;
+    };
+
+    return await walk(workingDir);
+  }
+
+  async readCommit(hash: Hash): Promise<CommitEntry> {
     const { type, content } = await this.readObject(hash);
     if (type !== 'commit') {
       throw new Error(`Expected commit, got ${type}`);
@@ -150,13 +263,18 @@ export class Repo {
     const text = content.toString('utf-8');
     const lines = text.split('\n');
 
-    const entry: CommitEntry = {
+    /*const entry: CommitEntry = {
       tree: '',
       parents: [],
       author: '',
       committer: '',
       message: ''
-    };
+    };*/
+    let tree:Hash|undefined=undefined;
+    let parents:Hash[]=[];
+    let author="";
+    let committer="";
+    let message="";
 
     let inMessage = false;
     const messageLines: string[] = [];
@@ -170,18 +288,20 @@ export class Repo {
       if (inMessage) {
         messageLines.push(line);
       } else if (line.startsWith('tree ')) {
-        entry.tree = line.slice(5);
+        tree = asHash(line.slice(5));
       } else if (line.startsWith('parent ')) {
-        entry.parents.push(line.slice(7));
+        parents.push(asHash(line.slice(7)));
       } else if (line.startsWith('author ')) {
-        entry.author = line.slice(7);
+        author = line.slice(7);
       } else if (line.startsWith('committer ')) {
-        entry.committer = line.slice(10);
+        committer = line.slice(10);
       }
     }
-
-    entry.message = messageLines.join('\n');
-    return entry;
+    message = messageLines.join('\n');
+    if (!tree) throw new Error("Missing tree");
+    return {
+      tree, parents, author, committer, message
+    };
   }
   encodeCommit(entry: CommitEntry): Buffer {
     const lines: string[] = [];
@@ -199,10 +319,10 @@ export class Repo {
   async writeCommit(entry: CommitEntry) {
     return await this.writeObject("commit", this.encodeCommit(entry));
   }
-  async readHead(branch: string): Promise<string> {
+  async readHead(branch: BranchName): Promise<Hash> {
     const refPath = path.join(this.gitDir, "refs/heads", branch);
     const data = await fs.promises.readFile(refPath, 'utf-8');
-    const hash = data.trim();
+    const hash = asHash(data.trim());
 
     if (!/^[0-9a-f]{40}$/.test(hash)) {
       throw new Error(`Invalid ref content in ${branch}: ${hash}`);
@@ -212,33 +332,33 @@ export class Repo {
   async *traverseTree(
     entries: TreeEntry[],
     prefix = ''
-  ): AsyncGenerator<{ path: string; hash: string; content?: Buffer }> {
+  ): AsyncGenerator<{ path: RelPath; hash: Hash; content?: Buffer }> {
     for (const entry of entries) {
-      const fullPath = path.posix.join(prefix, entry.name);
+      const relPath = asRelPath(path.posix.join(prefix, entry.name));
       const { type, content } = await this.readObject(entry.hash);
 
       if (type === 'blob') {
-        yield { path: fullPath, hash: entry.hash, content };
+        yield { path: relPath, hash: entry.hash, content };
       } else if (type === 'tree') {
-        yield { path: fullPath, hash: entry.hash };
+        yield { path: relPath, hash: entry.hash };
         const childEntries = await this.readTree(entry.hash);
-        yield* this.traverseTree(childEntries, fullPath); // 再帰呼び出し
+        yield* this.traverseTree(childEntries, relPath); // 再帰呼び出し
       } else {
         // 他の型（e.g. commit）はスキップまたはエラー
         throw new Error(`Unexpected object type in tree: ${type}`);
       }
     }
   }
-  async updateRef(refPath: string, hash: string): Promise<void> {
+  async updateRef(refPath: Path, hash: Hash): Promise<void> {
     const fullPath = path.join(this.gitDir, refPath);
     const dirPath = path.dirname(fullPath);
     await fs.promises.mkdir(dirPath, { recursive: true });
     await fs.promises.writeFile(fullPath, hash);
   }
-  async findMergeBase(commitHashA: string, commitHashB: string): Promise<string | null> {
+  async findMergeBase(commitHashA: Hash, commitHashB: Hash): Promise<Hash | null> {
     // visitedA と visitedB に各ブランチの履歴を記録
-    const visitedA = new Set<string>();
-    const visitedB = new Set<string>();
+    const visitedA = new Set<Hash>();
+    const visitedB = new Set<Hash>();
 
     // 両方の探索キュー
     const queueA = [commitHashA];
@@ -287,37 +407,37 @@ export class Repo {
     for (const name of names) {
       const oldEnt = oldMap.get(name);
       const newEnt = newMap.get(name);
-      const fullPath = path.posix.join(prefix, name);
+      const relPath = asRelPath(path.posix.join(prefix, name));
 
       if (oldEnt && !newEnt) {
         // 削除
         if (oldEnt.mode === '40000') {
           const baseSub = await this.readTree(oldEnt.hash);
-          const subDiffs = await this.diffTreeRecursive(baseSub, [], fullPath);
+          const subDiffs = await this.diffTreeRecursive(baseSub, [], relPath);
           diffs.push(...subDiffs);
         } else {
-          diffs.push({ path: fullPath, type: 'deleted', oldHash: oldEnt.hash });
+          diffs.push({ path: relPath, type: 'deleted', oldHash: oldEnt.hash });
         }
       } else if (!oldEnt && newEnt) {
         // 追加
         if (newEnt.mode === '40000') {
           const otherSub = await this.readTree(newEnt.hash);
-          const subDiffs = await this.diffTreeRecursive([], otherSub, fullPath);
+          const subDiffs = await this.diffTreeRecursive([], otherSub, relPath);
           diffs.push(...subDiffs);
         } else {
-          diffs.push({ path: fullPath, type: 'added', newHash: newEnt.hash });
+          diffs.push({ path: relPath, type: 'added', newHash: newEnt.hash });
         }
       } else if (oldEnt && newEnt) {
         if (oldEnt.mode === '40000' && newEnt.mode === '40000') {
           // ディレクトリどうし → 再帰
           const baseSub = await this.readTree(oldEnt.hash);
           const otherSub = await this.readTree(newEnt.hash);
-          const subDiffs = await this.diffTreeRecursive(baseSub, otherSub, fullPath);
+          const subDiffs = await this.diffTreeRecursive(baseSub, otherSub, relPath);
           diffs.push(...subDiffs);
         } else if (oldEnt.hash !== newEnt.hash) {
           // ファイルが変更
           diffs.push({
-            path: fullPath,
+            path: relPath,
             type: 'modified',
             oldHash: oldEnt.hash,
             newHash: newEnt.hash
@@ -342,8 +462,8 @@ export class Repo {
       this.diffTreeRecursive(baseTree, aTree),
       this.diffTreeRecursive(baseTree, bTree)
     ]);
-    const toA: TreeDiffEntry[] = [];//new Map<string, TreeDiffEntry>();
-    const toB: TreeDiffEntry[] = [];//new Map<string, TreeDiffEntry>();
+    const toA: TreeDiffEntry[] = [];
+    const toB: TreeDiffEntry[] = [];
     const conflicts: Conflict[] = [];
     const allPaths= new Set([...diffA, ...diffB].map(d=>d.path));
     const diffMapA= new Map(diffA.map(d=>[d.path,d]));

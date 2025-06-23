@@ -1,10 +1,10 @@
-import {Repo} from "../src/git.js";
+import {asBranchName, asPath, Repo} from "../src/git.js";
 import * as assert from "assert";
 export async function main(){
-    const repo=new Repo(".git");
+    const repo=new Repo(asPath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
     //console.log(obj.type, obj.content);
-    const head=await repo.readHead("main");
+    const head=await repo.readHead(asBranchName("main"));
     console.log(head);
     const commit=await repo.readCommit(head);
     console.log(commit);
