@@ -8,8 +8,8 @@ import ignore from 'ignore';
 import { diff, DiffEntry, promisify } from 'util';
 
 const SymHash=Symbol("hash");
-type Hash=string&{[SymHash]:undefined};
-function isHash(s: string): s is Hash {
+export type Hash=string&{[SymHash]:undefined};
+export function isHash(s: string): s is Hash {
   return /^[0-9a-f]{40}$/.test(s);  
 }
 export function asHash(s:string) {
@@ -17,8 +17,8 @@ export function asHash(s:string) {
   return s;
 }
 //const SymMode=Symbol("mode");
-type Mode="40000"|"100644";
-function isMode(s: string): s is Mode {
+export type Mode="40000"|"100644";
+export function isMode(s: string): s is Mode {
   return /^[0-9]+$/.test(s);  
 }
 export function asMode(s: string) {
@@ -27,17 +27,17 @@ export function asMode(s: string) {
 }
 
 const SymRelPath=Symbol("path");
-type RelPath=string&{[SymRelPath]:undefined};
-function isRelPath(s:string): s is RelPath{
+export type RelPath=string&{[SymRelPath]:undefined};
+export function isRelPath(s:string): s is RelPath{
   return true;
 }
 const SymAbsPath=Symbol("path");
-type AbsPath=string&{[SymAbsPath]:undefined};
-function isAbsPath(s:string): s is AbsPath{
+export type AbsPath=string&{[SymAbsPath]:undefined};
+export function isAbsPath(s:string): s is AbsPath{
   return true;
 }
-type Path=RelPath|AbsPath;
-function isPath(s:string): s is Path {
+export type Path=RelPath|AbsPath;
+export function isPath(s:string): s is Path {
   return isAbsPath(s) || isRelPath(s);
 }
 export function asPath(s:string) {
@@ -49,8 +49,8 @@ export function asRelPath(s:string) {
   return s;
 }
 const SymFilename=Symbol("filename");
-type Filename=string&{[SymFilename]:undefined};
-function isFilename(s:string): s is Filename{
+export type Filename=string&{[SymFilename]:undefined};
+export function isFilename(s:string): s is Filename{
   return true;
 }
 export function asFilename(s:string) {
@@ -58,21 +58,21 @@ export function asFilename(s:string) {
   return s;
 }
 const SymBranch=Symbol("branch");
-function isBranchName(s:string): s is BranchName{
+export function isBranchName(s:string): s is BranchName{
   return true;
 }
 export function asBranchName(s:string) {
   if (!isBranchName(s)) throw new Error(`${s} is not a branch name`);
   return s;
 }
-type BranchName=string&{[SymBranch]:undefined};
+export type BranchName=string&{[SymBranch]:undefined};
 
-type Conflict = { path: Path; base?: Hash; a?: Hash; b?: Hash };
-type ObjectType = "commit" | "tree" | "blob" | "tag";
-function isObjectType(type: string): type is ObjectType {
+export type Conflict = { path: Path; base?: Hash; a?: Hash; b?: Hash };
+export type ObjectType = "commit" | "tree" | "blob" | "tag";
+export function isObjectType(type: string): type is ObjectType {
   return ['commit', 'tree', 'blob', 'tag'].includes(type);
 }
-type TreeDiffEntry = {
+export type TreeDiffEntry = {
   path: Path;
   type: 'added' | 'deleted' | 'modified';
   oldHash?: Hash;
@@ -130,6 +130,9 @@ export class Repo {
     const hash = asHash( crypto.createHash('sha1').update(store).digest('hex') );
 
     const filePath = this.getObjectPath(hash);
+    if (await fs.promises.access(filePath).then(() => true).catch(() => false)) {
+      return hash; // 既に存在する場合はそのまま返す
+    }
     const dirPath = path.dirname(filePath);
     await fs.promises.mkdir(dirPath, { recursive: true });
 
