@@ -90,10 +90,48 @@ export type TreeEntry = {
 export type CommitEntry = {
   tree: Hash;
   parents: Hash[];            // ← 配列に変更（複数 parent 対応）
-  author: string;
-  committer: string;
+  author: Author;
+  committer: Author;
   message: string;
 };
+export class Author {
+  name: string;
+  email: string;
+  date: Date;
+  constructor(
+    name: string,
+    email: string,
+    date: Date = new Date()
+  ) {
+    this.name = name;
+    this.email = email;
+    this.date = date;
+  }
+
+  toString(): string {
+    const timestamp = Math.floor(this.date.getTime() / 1000);
+    const offsetMinutes = this.date.getTimezoneOffset();
+    const absMinutes = Math.abs(offsetMinutes);
+    const sign = offsetMinutes > 0 ? '-' : '+';
+    const hh = String(Math.floor(absMinutes / 60)).padStart(2, '0');
+    const mm = String(absMinutes % 60).padStart(2, '0');
+    const tz = `${sign}${hh}${mm}`;
+
+    return `${this.name} <${this.email}> ${timestamp} ${tz}`;
+  }
+  static parse(str: string): Author {
+    const match = str.match(/^(.+?) <(.+?)> (\d+) ([+-]\d{4})$/);
+    if (!match) {
+      throw new Error(`Invalid author format: ${str}`);
+    }
+    const [, name, email, timestampStr, tz] = match;
+    const timestamp = parseInt(timestampStr, 10);
+    // タイムゾーンの補正は入れない（Gitはそのまま保存してる）
+    const date = new Date(timestamp * 1000);
+    return new Author(name, email, date);
+  }
+}
+
 export type GitObject = { type: ObjectType; hash: Hash, content: Buffer };
 export class Repo {
   constructor(public gitDir: Path) { }
@@ -275,8 +313,8 @@ export class Repo {
     };*/
     let tree:Hash|undefined=undefined;
     let parents:Hash[]=[];
-    let author="";
-    let committer="";
+    let author:Author|undefined=undefined;
+    let committer:Author|undefined=undefined;
     let message="";
 
     let inMessage = false;
@@ -295,13 +333,15 @@ export class Repo {
       } else if (line.startsWith('parent ')) {
         parents.push(asHash(line.slice(7)));
       } else if (line.startsWith('author ')) {
-        author = line.slice(7);
+        author = Author.parse(line.slice(7));
       } else if (line.startsWith('committer ')) {
-        committer = line.slice(10);
+        committer = Author.parse(line.slice(10));
       }
     }
     message = messageLines.join('\n');
     if (!tree) throw new Error("Missing tree");
+    if (!author) throw new Error("Missing author");
+    if (!committer) throw new Error("Missing commiter");
     return {
       tree, parents, author, committer, message
     };
@@ -352,8 +392,8 @@ export class Repo {
       }
     }
   }
-  async updateRef(refPath: Path, hash: Hash): Promise<void> {
-    const fullPath = path.join(this.gitDir, refPath);
+  async updateHead(branch: BranchName, hash: Hash): Promise<void> {
+    const fullPath = path.join(this.gitDir, "refs/heads", branch);
     const dirPath = path.dirname(fullPath);
     await fs.promises.mkdir(dirPath, { recursive: true });
     await fs.promises.writeFile(fullPath, hash);

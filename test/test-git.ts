@@ -1,4 +1,4 @@
-import {asBranchName, asPath, Hash, RelPath, Repo, TreeEntry} from "../src/git.js";
+import {asBranchName, asPath, Author, Hash, RelPath, Repo, TreeEntry} from "../src/git.js";
 import * as assert from "assert";
 export async function main(){
     const repo=new Repo(asPath(".git"));
@@ -20,6 +20,16 @@ export async function main(){
     for await (let e of repo.traverseTree(bt)) {
         console.log(e.path, e.hash, await newLineType(e.path, e.hash));
     }
+    const newCommitHash=await repo.writeTree(bt);
+    const newCommit=await repo.writeCommit({
+        author: new Author("hoge1e3","test@example.com"),
+        committer: new Author("hoge1e3","test@example.com"),
+        parents: [head],
+        message: "Change test-git.js",
+        tree: newCommitHash
+    });
+    await repo.updateHead(asBranchName("main"), newCommit);
+
     async function newLineType(path:RelPath, hash:Hash) {
         if (path.match(/\.(js|ts|json)$/)) {
             const text=await repo.readBlobAsText(hash);
@@ -31,3 +41,6 @@ export async function main(){
     }
 }    
 main();
+/*
+get committer times: parse commit time and parents for e28d7596fe348f27bfa19c67921daa3a601059be: parse 'committer' header: find email terminator in 'hoge1e3'
+*/
