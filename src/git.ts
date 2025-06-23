@@ -3,12 +3,20 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import crypto from 'crypto';
-import { promisify } from 'util';
+import { diff, DiffEntry, promisify } from 'util';
 
-type ObjectType="commit" | "tree" | "blob" | "tag";
+type Conflict = { path: string; base?: string; a?: string; b?: string };
+type ObjectType = "commit" | "tree" | "blob" | "tag";
 function isObjectType(type: string): type is ObjectType {
   return ['commit', 'tree', 'blob', 'tag'].includes(type);
 }
+type TreeDiffEntry = {
+  path: string;
+  type: 'added' | 'deleted' | 'modified';
+  oldHash?: string;
+  newHash?: string;
+};
+
 const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);
 // src/repo.ts の先頭付近
@@ -24,9 +32,9 @@ export type CommitEntry = {
   committer: string;
   message: string;
 };
-export type GitObject={ type: ObjectType; hash: string, content: Buffer };
+export type GitObject = { type: ObjectType; hash: string, content: Buffer };
 export class Repo {
-  constructor(public gitDir: string) {}
+  constructor(public gitDir: string) { }
 
   private getObjectPath(hash: string): string {
     const dir = path.join(this.gitDir, 'objects', hash.slice(0, 2));
@@ -51,7 +59,7 @@ export class Repo {
     if (!isObjectType(type)) {
       throw new Error(`Unknown object type: ${type}`);
     }
-    return { type, content , hash};
+    return { type, content, hash };
   }
 
   async writeObject(type: ObjectType, content: Buffer): Promise<string> {
@@ -138,10 +146,10 @@ export class Repo {
     if (type !== 'commit') {
       throw new Error(`Expected commit, got ${type}`);
     }
-  
+
     const text = content.toString('utf-8');
     const lines = text.split('\n');
-  
+
     const entry: CommitEntry = {
       tree: '',
       parents: [],
@@ -149,16 +157,16 @@ export class Repo {
       committer: '',
       message: ''
     };
-  
+
     let inMessage = false;
     const messageLines: string[] = [];
-  
+
     for (const line of lines) {
       if (!inMessage && line === '') {
         inMessage = true;
         continue;
       }
-  
+
       if (inMessage) {
         messageLines.push(line);
       } else if (line.startsWith('tree ')) {
@@ -171,7 +179,7 @@ export class Repo {
         entry.committer = line.slice(10);
       }
     }
-  
+
     entry.message = messageLines.join('\n');
     return entry;
   }
@@ -185,7 +193,7 @@ export class Repo {
     lines.push(`committer ${entry.committer}`);
     lines.push('');
     lines.push(entry.message);
-  
+
     return Buffer.from(lines.join('\n'), 'utf-8');
   }
   async writeCommit(entry: CommitEntry) {
@@ -220,42 +228,6 @@ export class Repo {
         throw new Error(`Unexpected object type in tree: ${type}`);
       }
     }
-  }
-  async mergeBranches(into: string, from: string, author: string): Promise<string> {
-    const baseCommitHash = await this.readHead(into);
-    const mergeCommitHash = await this.readHead(from);
-
-    const baseCommit = await this.readCommit(baseCommitHash);
-    const mergeCommit = await this.readCommit(mergeCommitHash);
-
-    const baseTree = await this.readTree(baseCommit.tree);
-    const mergeTree = await this.readTree(mergeCommit.tree);
-
-    // ★ 単純なファイル名ベースのユニオン（重複は base を優先）
-    const mergedMap = new Map<string, TreeEntry>();
-    for (const e of mergeTree) mergedMap.set(e.name, e);
-    for (const e of baseTree) mergedMap.set(e.name, e); // base 優先
-
-    const mergedEntries = Array.from(mergedMap.values());
-    const mergedTreeHash = await this.writeTree(mergedEntries);
-
-    const now = Math.floor(Date.now() / 1000);
-    const info = `${author} ${now} +0000`;
-
-    const mergedCommit:CommitEntry = {
-      tree: mergedTreeHash,
-      parents: [baseCommitHash, mergeCommitHash],
-      author: info,
-      committer: info,
-      message: `Merge branch '${from}' into '${into}'`
-    };
-
-    const newCommitHash = await this.writeCommit(mergedCommit);
-
-    // refs/heads/baseBranch を更新
-    await this.updateRef(path.join('refs', 'heads', into), newCommitHash);
-
-    return newCommitHash;
   }
   async updateRef(refPath: string, hash: string): Promise<void> {
     const fullPath = path.join(this.gitDir, refPath);
@@ -300,5 +272,107 @@ export class Repo {
     // 共通祖先がない（ありえないが保険）
     return null;
   }
+  async diffTreeRecursive(
+    oldTree: TreeEntry[],
+    newTree: TreeEntry[],
+    prefix = ''
+  ): Promise<TreeDiffEntry[]> {
+    const diffs: TreeDiffEntry[] = [];
+
+    const oldMap = new Map(oldTree.map(e => [e.name, e]));
+    const newMap = new Map(newTree.map(e => [e.name, e]));
+
+    const names = new Set([...oldMap.keys(), ...newMap.keys()]);
+
+    for (const name of names) {
+      const oldEnt = oldMap.get(name);
+      const newEnt = newMap.get(name);
+      const fullPath = path.posix.join(prefix, name);
+
+      if (oldEnt && !newEnt) {
+        // 削除
+        if (oldEnt.mode === '40000') {
+          const baseSub = await this.readTree(oldEnt.hash);
+          const subDiffs = await this.diffTreeRecursive(baseSub, [], fullPath);
+          diffs.push(...subDiffs);
+        } else {
+          diffs.push({ path: fullPath, type: 'deleted', oldHash: oldEnt.hash });
+        }
+      } else if (!oldEnt && newEnt) {
+        // 追加
+        if (newEnt.mode === '40000') {
+          const otherSub = await this.readTree(newEnt.hash);
+          const subDiffs = await this.diffTreeRecursive([], otherSub, fullPath);
+          diffs.push(...subDiffs);
+        } else {
+          diffs.push({ path: fullPath, type: 'added', newHash: newEnt.hash });
+        }
+      } else if (oldEnt && newEnt) {
+        if (oldEnt.mode === '40000' && newEnt.mode === '40000') {
+          // ディレクトリどうし → 再帰
+          const baseSub = await this.readTree(oldEnt.hash);
+          const otherSub = await this.readTree(newEnt.hash);
+          const subDiffs = await this.diffTreeRecursive(baseSub, otherSub, fullPath);
+          diffs.push(...subDiffs);
+        } else if (oldEnt.hash !== newEnt.hash) {
+          // ファイルが変更
+          diffs.push({
+            path: fullPath,
+            type: 'modified',
+            oldHash: oldEnt.hash,
+            newHash: newEnt.hash
+          });
+        }
+        // else: hash が同じ → 無視
+      }
+    }
+
+    return diffs;
+  }
+  async threeWayMerge(
+    baseTree: TreeEntry[],
+    aTree: TreeEntry[],
+    bTree: TreeEntry[],
+  ): Promise<{
+    toA: TreeDiffEntry[];
+    toB: TreeDiffEntry[];
+    conflicts: Conflict[];
+  }> {
+    const [diffA, diffB] = await Promise.all([
+      this.diffTreeRecursive(baseTree, aTree),
+      this.diffTreeRecursive(baseTree, bTree)
+    ]);
+    const toA: TreeDiffEntry[] = [];//new Map<string, TreeDiffEntry>();
+    const toB: TreeDiffEntry[] = [];//new Map<string, TreeDiffEntry>();
+    const conflicts: Conflict[] = [];
+    const allPaths= new Set([...diffA, ...diffB].map(d=>d.path));
+    const diffMapA= new Map(diffA.map(d=>[d.path,d]));
+    const diffMapB= new Map(diffB.map(d=>[d.path,d]));
+    for (const path of allPaths) {
+      const da=diffMapA.get(path);
+      const db=diffMapB.get(path);
+      if (da && db) {
+        if (da.type==="deleted" && db.type==="deleted") {
+        } else if (da.type==="deleted") {
+          toA.push(db);
+        } else if (db.type==="deleted") {
+          toB.push(da);
+        } else {
+          if (da.oldHash!==db.oldHash) {
+            throw new Error(`old hash does not match ${da.oldHash} !== ${db.oldHash}`);
+          }
+          conflicts.push({path, base:da.oldHash, a:da.newHash, b:db.newHash});
+        }
+      } else if (db) {
+        toA.push(db);
+      } else if (da) {
+        toB.push(da);
+      }
+    }
+    return {
+      toA, toB, conflicts
+    };
+  }
+
 
 }
