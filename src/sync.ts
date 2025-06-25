@@ -3,7 +3,6 @@ import path from 'path';
 import axios from 'axios';
 import { asHash, Hash, Path } from './types.js';
 import { Repo } from './git.js';
-import { IncomingHttpStatusHeader } from 'http2';
 
 type Config = {
     serverUrl: string,

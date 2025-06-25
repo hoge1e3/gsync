@@ -1,12 +1,13 @@
-import {asBranchName, asPath, Author, Hash, RelPath, TreeEntry} from "../src/types.js";
+import { asPath, Author, Hash, RelPath, TreeEntry, asLocalRef, asBranchName} from "../src/types.js";
 import * as assert from "assert";
 import { Repo } from "../src/git.js";
 import { Sync } from "../src/sync.js";
+const localMainRef = asLocalRef(asBranchName("main"));
 export async function testCommit(){
     const repo=new Repo(asPath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
     //console.log(obj.type, obj.content);
-    const curCommitHash=await repo.readHead(asBranchName("main"));
+    const curCommitHash=await repo.readHead(localMainRef);
     console.log(curCommitHash);
     const curCommit=await repo.readCommit(curCommitHash);
     console.log(curCommit);
@@ -30,7 +31,7 @@ export async function testCommit(){
         message: "Change test-git.js",
         tree: newCommitTreeHash
     });
-    await repo.updateHead(asBranchName("main"), newCommitHash);
+    await repo.updateHead(localMainRef, newCommitHash);
 
     async function newLineType(path:RelPath, hash:Hash) {
         if (path.match(/\.(js|ts|json)$/)) {
@@ -44,29 +45,30 @@ export async function testCommit(){
 }    
 async function testMerge() {
     const repo=new Repo(asPath(".git"));
-    const mainCommitHash=await repo.readHead(asBranchName("main"));
+    const mainCommitHash=await repo.readHead(localMainRef);
     const mainCommit=await repo.readCommit(mainCommitHash);
-    const branchCommitHash=await repo.readHead(asBranchName("branch1"));
+    const branchCommitHash=await repo.readHead(asLocalRef(asBranchName("branch1")));
     const branchCommit=await repo.readCommit(branchCommitHash);
     
 }
 async function testSync_push() {
     const sync=new Sync(asPath(".git"));
     await sync.uploadObjects();
-    await sync.pushHead(asBranchName("main"));
+    await sync.pushHead(localMainRef);
 }
 async function testSync_fetch() {
     const sync=new Sync(asPath("js/test/fixture/dotgit"));
     await sync.downloadObjects();
-    await sync.fetchHead(asBranchName("main"));
+    await sync.fetchHead(localMainRef);
 
 }
 async function test_clone() {
     const repo=new Repo(asPath("js/test/fixture/dotgit"));
-    repo.clone(asBranchName("main"));
+    repo.clone(localMainRef);
     
 }
 test_clone();
+
 //main();
 /*
 get committer times: parse commit time and parents for e28d7596fe348f27bfa19c67921daa3a601059be: parse 'committer' header: find email terminator in 'hoge1e3'

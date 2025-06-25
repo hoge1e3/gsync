@@ -49,7 +49,7 @@ export function asFilename(s:string) {
   if (!isFilename(s)) throw new Error(`${s} is not a filename`);
   return s;
 }
-/*const SymBranch=Symbol("branch");
+const SymBranch=Symbol("branch");
 export function isBranchName(s:string): s is BranchName{
   return true;
 }
@@ -58,7 +58,7 @@ export function asBranchName(s:string) {
   return s;
 }
 export type BranchName=string&{[SymBranch]:undefined};
-*/
+
 const SymRef=Symbol("ref");
 export function isRef(s:string): s is Ref{
   return !!s.match(/^refs\//);
@@ -67,7 +67,7 @@ export function asRef(s:string) {
   if (!isRef(s)) throw new Error(`${s} is not a ref path`);
   return s;
 }
-export function fromBranchName(s:string):Ref {
+export function asLocalRef(s:BranchName):Ref {
   return asRef(`refs/heads/${s}`);
 }
 export type Ref=string&{[SymRef]:undefined};
