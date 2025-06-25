@@ -1,6 +1,6 @@
 import {asBranchName, asPath, Author, Hash, RelPath, Repo, TreeEntry} from "../src/git.js";
 import * as assert from "assert";
-export async function main(){
+export async function testCommit(){
     const repo=new Repo(asPath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
     //console.log(obj.type, obj.content);
@@ -40,7 +40,15 @@ export async function main(){
         return "bin";
     }
 }    
-main();
+async function testMerge() {
+    const repo=new Repo(asPath(".git"));
+    const mainCommitHash=await repo.readHead(asBranchName("main"));
+    const mainCommit=await repo.readCommit(mainCommitHash);
+    const branchCommitHash=await repo.readHead(asBranchName("branch1"));
+    const branchCommit=await repo.readCommit(branchCommitHash);
+    
+}
+//main();
 /*
 get committer times: parse commit time and parents for e28d7596fe348f27bfa19c67921daa3a601059be: parse 'committer' header: find email terminator in 'hoge1e3'
 */
