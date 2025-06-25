@@ -1,5 +1,7 @@
-import {asBranchName, asPath, Author, Hash, RelPath, Repo, TreeEntry} from "../src/git.js";
+import {asBranchName, asPath, Author, Hash, RelPath, TreeEntry} from "../src/types.js";
 import * as assert from "assert";
+import { Repo } from "../src/git.js";
+import { Sync } from "../src/sync.js";
 export async function testCommit(){
     const repo=new Repo(asPath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
@@ -48,6 +50,12 @@ async function testMerge() {
     const branchCommit=await repo.readCommit(branchCommitHash);
     
 }
+async function testSync() {
+    const sync=new Sync(asPath(".git"));
+    await sync.uploadObjects();
+    await sync.pushHead(asBranchName("main"));
+}
+testSync();
 //main();
 /*
 get committer times: parse commit time and parents for e28d7596fe348f27bfa19c67921daa3a601059be: parse 'committer' header: find email terminator in 'hoge1e3'

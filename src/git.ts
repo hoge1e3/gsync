@@ -5,7 +5,7 @@ import zlib from 'zlib';
 import crypto from 'crypto';
 import ignore from 'ignore';
 import { promisify } from 'util';
-import { asFilename, asHash, asMode, asPath, asRelPath, Author, BranchName, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry } from './types';
+import { asFilename, asHash, asMode, asPath, asRelPath, Author, BranchName, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry } from './types.js';
 
 const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);

@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { Hash, Path } from './types';
+import { BranchName, Hash, Path } from './types.js';
+import { Repo } from './git.js';
+import { IncomingHttpStatusHeader } from 'http2';
 
 type Config = {
     serverUrl: string,
@@ -71,6 +73,7 @@ export class Sync {
             console.log('No new objects to upload.');
             return;
         }
+        //console.log(objects);
 
         const res = await axios.post(`${config.serverUrl}?action=upload`, {
             repo_id: config.repoId,
@@ -114,6 +117,33 @@ export class Sync {
         }
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
+    }
+    async fetchHead(branch: BranchName): Promise<Hash> {
+        const { repoId, serverUrl } = await this.readConfig();
+
+        const res = await axios.post(`${serverUrl}?action=get_head`, {
+            repo_id: repoId,
+            branch
+        });
+
+        const hash = res.data.hash as Hash;
+        const repo = new Repo(this.gitDir);
+        await repo.updateHead(branch, hash);
+        console.log(`HEAD of '${branch}': ${hash ?? '(not set)'}`);
+        return hash;
+    }
+    async pushHead(branch: BranchName): Promise<void> {
+        const { repoId, serverUrl } = await this.readConfig();
+        const repo = new Repo(this.gitDir);
+        const hash:Hash= await repo.readHead(branch);
+
+        await axios.post(`${serverUrl}?action=set_head`, {
+            repo_id: repoId,
+            branch,
+            hash
+        });
+
+        console.log(`Pushed HEAD of '${branch}' to ${hash}`);
     }
 }
 /*
