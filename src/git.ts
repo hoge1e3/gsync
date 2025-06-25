@@ -5,7 +5,7 @@ import zlib from 'zlib';
 import crypto from 'crypto';
 import ignore from 'ignore';
 import { promisify } from 'util';
-import { asFilename, asHash, asMode, asPath, asRelPath, Author, BranchName, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry } from './types.js';
+import { asFilename, asHash, asMode, asPath, asRelPath, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry } from './types.js';
 
 const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);
@@ -238,14 +238,10 @@ export class Repo {
   async writeCommit(entry: CommitEntry) {
     return await this.writeObject("commit", this.encodeCommit(entry));
   }
-  async readHead(branch: BranchName): Promise<Hash> {
-    const refPath = path.join(this.gitDir, "refs/heads", branch);
+  async readHead(ref: Ref): Promise<Hash> {
+    const refPath = path.join(this.gitDir, ref);
     const data = await fs.promises.readFile(refPath, 'utf-8');
     const hash = asHash(data.trim());
-
-    if (!/^[0-9a-f]{40}$/.test(hash)) {
-      throw new Error(`Invalid ref content in ${branch}: ${hash}`);
-    }
     return hash;
   }
   async *traverseTree(
@@ -268,8 +264,8 @@ export class Repo {
       }
     }
   }
-  async updateHead(branch: BranchName, hash: Hash): Promise<void> {
-    const fullPath = path.join(this.gitDir, "refs/heads", branch);
+  async updateHead(ref: Ref, hash: Hash): Promise<void> {
+    const fullPath = path.join(this.gitDir, ref);
     const dirPath = path.dirname(fullPath);
     await fs.promises.mkdir(dirPath, { recursive: true });
     await fs.promises.writeFile(fullPath, hash);

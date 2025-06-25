@@ -50,12 +50,23 @@ async function testMerge() {
     const branchCommit=await repo.readCommit(branchCommitHash);
     
 }
-async function testSync() {
+async function testSync_push() {
     const sync=new Sync(asPath(".git"));
     await sync.uploadObjects();
     await sync.pushHead(asBranchName("main"));
 }
-testSync();
+async function testSync_fetch() {
+    const sync=new Sync(asPath("js/test/fixture/dotgit"));
+    await sync.downloadObjects();
+    await sync.fetchHead(asBranchName("main"));
+
+}
+async function test_clone() {
+    const repo=new Repo(asPath("js/test/fixture/dotgit"));
+    repo.clone(asBranchName("main"));
+    
+}
+test_clone();
 //main();
 /*
 get committer times: parse commit time and parents for e28d7596fe348f27bfa19c67921daa3a601059be: parse 'committer' header: find email terminator in 'hoge1e3'

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { BranchName, Hash, Path } from './types.js';
+import { asHash, Hash, Path } from './types.js';
 import { Repo } from './git.js';
 import { IncomingHttpStatusHeader } from 'http2';
 
@@ -96,8 +96,9 @@ export class Sync {
 
         const objects: { hash: Hash; content: string }[] = res.data.objects;
         const newDownloadSince = res.data.newest - 0;
-
+        //console.log("objects",objects.map(o=>o.hash));
         for (const { hash, content } of objects) {
+            asHash(hash);
             const dir = hash.slice(0, 2);
             const file = hash.slice(2);
             const dirPath = path.join(objectsDir, dir);
