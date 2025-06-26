@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { asHash, Hash, Path } from './types.js';
+import { asHash, asLocalRef, asPath, BranchName, Hash, Path } from './types.js';
 import { Repo } from './git.js';
 
 type Config = {
@@ -15,13 +15,18 @@ type State = {
 
 export class Sync {
     constructor(public gitDir: Path) { }
+    private _repo:Repo|undefined;
+    get repo():Repo{
+        this._repo = this._repo || new Repo(this.gitDir);
+        return this._repo;
+    }
     async readConfig(): Promise<Config> {
         const conffile = this.confFile();
         const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as Config;
         return conf;
     }
     private confFile() {
-        return path.join(this.gitDir, "remote-conf.json");
+        return asPath(path.join(this.gitDir, "remote-conf.json"));
     }
 
     async readState(): Promise<State> {
@@ -36,7 +41,7 @@ export class Sync {
         return state;
     }
     private stateFile() {
-        return path.join(this.gitDir, "remote-state.json");
+        return asPath(path.join(this.gitDir, "remote-state.json"));
     }
     async writeState(state: State) {
         const statefile = this.stateFile();
@@ -127,15 +132,13 @@ export class Sync {
         });
 
         const hash = res.data.hash as Hash;
-        const repo = new Repo(this.gitDir);
-        await repo.updateHead(branch, hash);
+        await this.repo.updateHead(asLocalRef(branch), hash);
         console.log(`HEAD of '${branch}': ${hash ?? '(not set)'}`);
         return hash;
     }
     async pushHead(branch: BranchName): Promise<void> {
         const { repoId, serverUrl } = await this.readConfig();
-        const repo = new Repo(this.gitDir);
-        const hash:Hash= await repo.readHead(branch);
+        const hash:Hash= await this.repo.readHead(asLocalRef(branch));
 
         await axios.post(`${serverUrl}?action=set_head`, {
             repo_id: repoId,
@@ -144,6 +147,24 @@ export class Sync {
         });
 
         console.log(`Pushed HEAD of '${branch}' to ${hash}`);
+    }
+    async clone(branch: BranchName, into:Path) {
+        if (fs.existsSync(into) && fs.readdirSync(into).length>0) {
+            throw new Error(`${into} is not empty.`);
+        }
+        console.log(`Cloning into ${into}...`);
+        if (!fs.existsSync(into)) fs.mkdirSync(into);
+        const base=path.basename(this.gitDir);
+        const newGitDir=asPath(path.join(into,base));
+        fs.mkdirSync(newGitDir);
+        const newSync=new Sync(newGitDir);
+        fs.copyFileSync(this.confFile(), newSync.confFile());
+        await newSync.downloadObjects();
+        const headCommit=await this.fetchHead(branch);
+        const headTree=await this.repo.readCommit(headCommit);
+        await newSync.repo.checkoutTreeToDir(headTree.tree, into);
+
+
     }
 }
 /*

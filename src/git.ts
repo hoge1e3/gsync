@@ -133,7 +133,7 @@ export class Repo {
     } catch {
       // .gitignore がない場合は無視
     }
-
+    const base=path.basename(this.gitDir);
     const walk = async (dir: Path): Promise<TreeEntry[]> => {
       const entries: TreeEntry[] = [];
       const files = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -145,6 +145,8 @@ export class Repo {
         // 除外対象（.gitignore + .git フォルダ）をスキップ
         if (
           ig.ignores(relPath) ||
+          relPath === base ||
+          relPath.startsWith(base + path.sep) ||
           relPath === '.git' ||
           relPath.startsWith('.git' + path.sep)
         ) {
@@ -408,6 +410,25 @@ export class Repo {
       toA, toB, conflicts
     };
   }
+  async checkoutTreeToDir(treeHash: Hash, dirPath: Path): Promise<void> {
+    const entries = await this.readTree(treeHash);
 
+    for (const entry of entries) {
+      const outPath = asPath(path.join(dirPath, entry.name));
+
+      if (entry.mode === '40000') {
+        // ディレクトリ（tree）→ 再帰的に処理
+        await fs.promises.mkdir(outPath, { recursive: true });
+        await this.checkoutTreeToDir(entry.hash, outPath);
+      } else {
+        // blob → ファイルとして書き出す
+        const { type, content } = await this.readObject(entry.hash);
+        if (type !== 'blob') {
+          throw new Error(`Unexpected object type ${type} for ${entry.name}`);
+        }
+        await fs.promises.writeFile(outPath, content);
+      }
+    }
+  }
 
 }
