@@ -5,7 +5,7 @@ import zlib from 'zlib';
 import crypto from 'crypto';
 import ignore from 'ignore';
 import { promisify } from 'util';
-import { asFilename, asHash, asMode, asPath, asRelPath, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry } from './types.js';
+import { asFilename, asHash, asMode, asPath, asRelPath, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry, BranchName, asBranchName } from './types.js';
 
 const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);
@@ -430,5 +430,49 @@ export class Repo {
       }
     }
   }
+  async getCurrentBranchName(): Promise<BranchName> {
+    const headPath = path.join(this.gitDir, 'HEAD');
+    const content = await fs.promises.readFile(headPath, 'utf8');
 
+    const match = content.match(/^ref: refs\/heads\/(.+)\s*$/);
+    if (match) {
+      return asBranchName(match[1]); // 例: "main"
+    } else {
+      // detached HEAD の場合（SHA-1直書き）
+      throw new Error("detached HEAD!!");
+      //return null;
+    }
+  }
+  async readMergeHead():Promise<Hash|null>{
+    const MERGE_HEAD=path.join(this.gitDir, "MERGE_HEAD");
+    if (fs.existsSync(MERGE_HEAD)) return null;
+    return asHash(await fs.promises.readFile(MERGE_HEAD, {encoding:"utf-8"}));
+  }
+  async writeMergeHead(commitHash?: Hash) {
+    const MERGE_HEAD=path.join(this.gitDir, "MERGE_HEAD");
+    if (commitHash) {
+      fs.promises.writeFile(MERGE_HEAD, commitHash);
+    } else {
+      fs.promises.rm(MERGE_HEAD);
+    }
+  }
+  async applyDiff(diffs: TreeDiffEntry[]): Promise<void> {
+    const workDir = path.dirname(this.gitDir); // ワーキングディレクトリ
+
+    for (const diff of diffs) {
+      const filePath = path.join(workDir, diff.path);
+
+      if (diff.type === 'deleted') {
+        await fs.promises.rm(filePath, { force: true });
+      } else if (diff.type === 'added' || diff.type === 'modified') {
+        if (!diff.newHash) throw new Error(`Missing 'other' hash for ${diff.path}`);
+        const { type, content } = await this.readObject(diff.newHash);
+        if (type !== 'blob') throw new Error(`Expected blob, got ${type} for ${diff.path}`);
+
+        // 必要ならディレクトリを作成
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.promises.writeFile(filePath, content);
+      }
+    }
+  }
 }

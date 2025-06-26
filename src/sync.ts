@@ -12,7 +12,7 @@ type State = {
     downloadSince: number,
     uploadSince: number,
 };
-
+export const GIT_DIR_NAME=".gsync";
 export class Sync {
     constructor(public gitDir: Path) { }
     private _repo:Repo|undefined;
@@ -24,6 +24,10 @@ export class Sync {
         const conffile = this.confFile();
         const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as Config;
         return conf;
+    }
+    async writeConfig(conf:Config): Promise<void> {
+        const conffile = this.confFile();
+        await fs.promises.writeFile(conffile, JSON.stringify(conf));
     }
     private confFile() {
         return asPath(path.join(this.gitDir, "remote-conf.json"));
@@ -148,22 +152,21 @@ export class Sync {
 
         console.log(`Pushed HEAD of '${branch}' to ${hash}`);
     }
-    async clone(branch: BranchName, into:Path) {
+    static async clone(into:Path, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME) {
         if (fs.existsSync(into) && fs.readdirSync(into).length>0) {
             throw new Error(`${into} is not empty.`);
         }
         console.log(`Cloning into ${into}...`);
         if (!fs.existsSync(into)) fs.mkdirSync(into);
-        const base=path.basename(this.gitDir);
-        const newGitDir=asPath(path.join(into,base));
+        const newGitDir=asPath(path.join(into,gitDirName));
         fs.mkdirSync(newGitDir);
         const newSync=new Sync(newGitDir);
-        fs.copyFileSync(this.confFile(), newSync.confFile());
+        newSync.writeConfig(config);
         await newSync.downloadObjects();
         const headCommit=await newSync.fetchHead(branch);
         const headTree=await newSync.repo.readCommit(headCommit);
         await newSync.repo.checkoutTreeToDir(headTree.tree, into);
-
+        return newSync;
 
     }
 }

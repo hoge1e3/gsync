@@ -65,7 +65,7 @@ async function testSync_fetch() {
 }
 async function test_clone() {
     const repo=new Sync(asPath("js/test/fixture/dotgit"));
-    await repo.clone(branch_main , asPath("js/test/fixture/clonetes"));
+    await Sync.clone(asPath("js/test/fixture/clonetes"), await repo.readConfig() , branch_main );
     
 }
 test_clone();
