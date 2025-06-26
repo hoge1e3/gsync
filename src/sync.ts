@@ -160,8 +160,8 @@ export class Sync {
         const newSync=new Sync(newGitDir);
         fs.copyFileSync(this.confFile(), newSync.confFile());
         await newSync.downloadObjects();
-        const headCommit=await this.fetchHead(branch);
-        const headTree=await this.repo.readCommit(headCommit);
+        const headCommit=await newSync.fetchHead(branch);
+        const headTree=await newSync.repo.readCommit(headCommit);
         await newSync.repo.checkoutTreeToDir(headTree.tree, into);
 
 
