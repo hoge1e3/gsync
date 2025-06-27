@@ -105,6 +105,7 @@ export class Sync {
         const objects: { hash: Hash; content: string }[] = res.data.objects;
         const newDownloadSince = res.data.newest - 0;
         //console.log("objects",objects.map(o=>o.hash));
+        let donloaded=0, skipped=0;
         for (const { hash, content } of objects) {
             asHash(hash);
             const dir = hash.slice(0, 2);
@@ -119,11 +120,14 @@ export class Sync {
             if (!fs.existsSync(filePath)) {
                 const binary = Buffer.from(content, 'base64');
                 fs.writeFileSync(filePath, binary);
-                console.log('Saved:', hash);
+                //console.log('Saved:', hash);
+                donloaded++;
             } else {
-                console.log('Skipped (exists):', hash);
+                skipped++;
+                //console.log('Skipped (exists):', hash);
             }
         }
+        console.log(donloaded," objects downloaded. ",skipped," objects skipped.");
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
     }
