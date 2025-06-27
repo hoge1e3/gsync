@@ -46,26 +46,54 @@ export async function sync(dir: string) {
 
     const localCommitHash=await commit(dir);
     const sync=new Sync(findGitDir(asPath(dir)));
-    const repo=sync.repo;
+    //const repo=sync.repo;
     const branch=await repo.getCurrentBranchName();
     const remoteCommitHash=await sync.fetchHead(branch);
     const baseCommitHash=await repo.findMergeBase(localCommitHash, remoteCommitHash);
     if (remoteCommitHash===baseCommitHash) {
         // update remote
+        await sync.uploadObjects();
         console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
-        await sync.pushHead(branch);
-        return ;
-
-    } else if (localCommitHash===baseCommitHash) {
-        // update local
-
+        //console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
+        const status=await sync.setRemoteHead(branch, remoteCommitHash, localCommitHash);
+        if (status==null) {
+            console.log("Pushed");
+        } else {
+            console.log("Remote commit id changed into ",status, "try again");
+        }
+        return ;        return ;
     }
-
     const localCommit=await repo.readCommit(localCommitHash);
     const remoteCommit=await repo.readCommit(remoteCommitHash);
-    
-
     const localTree=await repo.readTree(localCommit.tree);
     const remoteTree=await repo.readTree(remoteCommit.tree);
-    repo.threeWayMerge()
+    if (localCommitHash===baseCommitHash) {
+        // update local
+        const diff=await repo.diffTreeRecursive(localTree, remoteTree)
+        await repo.applyDiff(diff);
+        await repo.updateHead(asLocalRef(branch), remoteCommitHash);
+        console.log("Update local branch", localCommitHash, "to" ,remoteCommitHash);
+        return;
+    }   
+    const baseCommit=await repo.readCommit(baseCommitHash);
+    const baseTree=await repo.readTree(baseCommit.tree);
+    const {toA, toB, conflicts}=await repo.threeWayMerge(baseTree, localTree, remoteTree);
+    await repo.writeMergeHead(remoteCommitHash);
+    await repo.applyDiff(toA);
+    if (conflicts.length==0) {
+        console.log("Auto-Merged from ",remoteCommit);
+        const mergedCommitHash=await commit(dir);
+        // update remote
+        console.log("Push into remote: ",remoteCommitHash, " to ",mergedCommitHash);
+        const status=await sync.setRemoteHead(branch, remoteCommit, mergedCommitHash);
+        if (status==null) {
+            console.log("Pushed");
+        } else {
+            console.log("Remote commit id changed into ",status, "try again");
+        }
+        return ;
+    } else {
+        console.log("CONFLICT");
+
+    }
 }

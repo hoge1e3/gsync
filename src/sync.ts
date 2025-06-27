@@ -15,11 +15,11 @@ type State = {
 export const GIT_DIR_NAME=".gsync";
 export class Sync {
     constructor(public gitDir: Path) { }
-    private _repo:Repo|undefined;
+    /*private _repo:Repo|undefined;
     get repo():Repo{
         this._repo = this._repo || new Repo(this.gitDir);
         return this._repo;
-    }
+    }*/
     async readConfig(): Promise<Config> {
         const conffile = this.confFile();
         const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as Config;
@@ -127,7 +127,7 @@ export class Sync {
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
     }
-    async fetchHead(branch: BranchName): Promise<Hash> {
+    async getRemoteHead(branch: BranchName): Promise<Hash> {
         const { repoId, serverUrl } = await this.readConfig();
 
         const res = await axios.post(`${serverUrl}?action=get_head`, {
@@ -136,21 +136,24 @@ export class Sync {
         });
 
         const hash = res.data.hash as Hash;
-        await this.repo.updateHead(asLocalRef(branch), hash);
+        //await this.repo.updateHead(asLocalRef(branch), hash);
         console.log(`HEAD of '${branch}': ${hash ?? '(not set)'}`);
         return hash;
     }
-    async pushHead(branch: BranchName): Promise<void> {
+    async setRemoteHead(branch: BranchName, current:Hash, next:Hash): Promise<string|null> {
         const { repoId, serverUrl } = await this.readConfig();
-        const hash:Hash= await this.repo.readHead(asLocalRef(branch));
+        //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
 
-        await axios.post(`${serverUrl}?action=set_head`, {
+        const {data}=await axios.post(`${serverUrl}?action=set_head`, {
             repo_id: repoId,
             branch,
-            hash
+            current, next,
         });
-
-        console.log(`Pushed HEAD of '${branch}' to ${hash}`);
+        if (data.status==="ok") {
+            console.log(`Pushed HEAD of '${branch}' from ${current} to ${next}`);
+            return null;
+        }
+        return data.status;
     }
     static async clone(into:Path, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME) {
         if (fs.existsSync(into) && fs.readdirSync(into).length>0) {

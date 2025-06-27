@@ -272,7 +272,7 @@ export class Repo {
     await fs.promises.mkdir(dirPath, { recursive: true });
     await fs.promises.writeFile(fullPath, hash);
   }
-  async findMergeBase(commitHashA: Hash, commitHashB: Hash): Promise<Hash | null> {
+  async findMergeBase(commitHashA: Hash, commitHashB: Hash): Promise<Hash> {
     // visitedA と visitedB に各ブランチの履歴を記録
     const visitedA = new Set<Hash>();
     const visitedB = new Set<Hash>();
@@ -307,7 +307,7 @@ export class Repo {
     }
 
     // 共通祖先がない（ありえないが保険）
-    return null;
+    throw new Error(`Unrelated history: ${commitHashA} and ${commitHashB}`);
   }
   async diffTreeRecursive(
     oldTree: TreeEntry[],
