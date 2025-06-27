@@ -1,14 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { asHash, asLocalRef, asPath, BranchName, Hash, Path } from './types.js';
-import { Repo } from './git.js';
+import { asHash, asPath, BranchName, Hash, Path } from './types.js';
 
-type Config = {
+
+export type Config = {
     serverUrl: string,
     repoId: string,
 };
-type State = {
+export type State = {
     downloadSince: number,
     uploadSince: number,
 };
@@ -140,7 +140,7 @@ export class Sync {
         console.log(`HEAD of '${branch}': ${hash ?? '(not set)'}`);
         return hash;
     }
-    async setRemoteHead(branch: BranchName, current:Hash, next:Hash): Promise<string|null> {
+    async setRemoteHead(branch: BranchName, current:Hash, next:Hash): Promise<void> {
         const { repoId, serverUrl } = await this.readConfig();
         //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
 
@@ -150,27 +150,11 @@ export class Sync {
             current, next,
         });
         if (data.status==="ok") {
-            console.log(`Pushed HEAD of '${branch}' from ${current} to ${next}`);
-            return null;
+            return ;
+            //console.log(`Pushed HEAD of '${branch}' from ${current} to ${next}`);
+            //return null;
         }
-        return data.status;
-    }
-    static async clone(into:Path, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME) {
-        if (fs.existsSync(into) && fs.readdirSync(into).length>0) {
-            throw new Error(`${into} is not empty.`);
-        }
-        console.log(`Cloning into ${into}...`);
-        if (!fs.existsSync(into)) fs.mkdirSync(into);
-        const newGitDir=asPath(path.join(into,gitDirName));
-        fs.mkdirSync(newGitDir);
-        const newSync=new Sync(newGitDir);
-        newSync.writeConfig(config);
-        await newSync.downloadObjects();
-        const headCommit=await newSync.fetchHead(branch);
-        const headTree=await newSync.repo.readCommit(headCommit);
-        await newSync.repo.checkoutTreeToDir(headTree.tree, into);
-        return newSync;
-
+        throw new Error("Atomic change failed: Someone changed the head to "+data.status);
     }
 }
 /*

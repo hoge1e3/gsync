@@ -5,7 +5,7 @@ import zlib from 'zlib';
 import crypto from 'crypto';
 import ignore from 'ignore';
 import { promisify } from 'util';
-import { asFilename, asHash, asMode, asPath, asRelPath, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry, BranchName, asBranchName } from './types.js';
+import { asFilename, asHash, asMode, asPath, asRelPath, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef } from './types.js';
 
 const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);
@@ -394,11 +394,16 @@ export class Repo {
           toA.push(db);
         } else if (db.type==="deleted") {
           toB.push(da);
-        } else {
+        } else if (da.type==="modified" && db.type==="modified") {
           if (da.oldHash!==db.oldHash) {
             throw new Error(`old hash does not match ${da.oldHash} !== ${db.oldHash}`);
           }
           conflicts.push({path, base:da.oldHash, a:da.newHash, b:db.newHash});
+        } else if (da.type==="added" && db.type==="added") {
+          conflicts.push({path, a:da.newHash, b:db.newHash});
+        } else {
+          // add & modified never happens
+          throw new Error(`Invalid state: a: ${da.type}, b: ${db.type}`);
         }
       } else if (db) {
         toA.push(db);
@@ -443,9 +448,16 @@ export class Repo {
       //return null;
     }
   }
+  async setCurrentBranchName(branch:BranchName): Promise<void> {
+    const headPath = path.join(this.gitDir, 'HEAD');
+    const refPath = asLocalRef(branch);
+    const content = `ref: ${refPath}\n`;
+    await fs.promises.writeFile(headPath, content, 'utf8');
+
+  }
   async readMergeHead():Promise<Hash|null>{
     const MERGE_HEAD=path.join(this.gitDir, "MERGE_HEAD");
-    if (fs.existsSync(MERGE_HEAD)) return null;
+    if (!fs.existsSync(MERGE_HEAD)) return null;
     return asHash(await fs.promises.readFile(MERGE_HEAD, {encoding:"utf-8"}));
   }
   async writeMergeHead(commitHash?: Hash) {

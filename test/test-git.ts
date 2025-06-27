@@ -2,8 +2,10 @@ import { asPath, Author, Hash, RelPath, TreeEntry, asLocalRef, asBranchName} fro
 import * as assert from "assert";
 import { Repo } from "../src/git.js";
 import { Sync } from "../src/sync.js";
+import { clone, commit, log, sync } from "../src/cmd.js";
 const branch_main = asBranchName("main");
 const localRef_main = asLocalRef(branch_main);
+/*
 export async function testCommit(){
     const repo=new Repo(asPath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
@@ -62,13 +64,33 @@ async function testSync_fetch() {
     await sync.downloadObjects();
     await sync.fetchHead(branch_main);
 
-}
-async function test_clone() {
+}*/
+async function test_clone(name="clonetes") {
     const repo=new Sync(asPath("js/test/fixture/dotgit"));
-    await Sync.clone(asPath("js/test/fixture/clonetes"), await repo.readConfig() , branch_main );
-    
+    /*await Sync.clone(asPath("js/test/fixture/clonetes"), await repo.readConfig() , branch_main );
+    */
+   const conf=await repo.readConfig();
+   await clone("js/test/fixture/"+name, conf.serverUrl, conf.repoId);
 }
-test_clone();
+async function test_commit(name="clonetes") {
+    await commit("js/test/fixture/"+name);
+}
+async function test_sync(name="clonetes") {
+    await sync("js/test/fixture/"+name);
+}
+async function main() {
+    //await test_clone();
+    //await test_commit();
+    //await test_sync();
+    //await test_clone("clonetes2");
+    //await test_commit("clonetes2");
+    //await test_sync("clonetes2");
+    
+    await test_sync();
+    
+    //await log("js/test/fixture/clonetes");
+}
+main();
 
 //main();
 /*

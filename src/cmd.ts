@@ -1,11 +1,59 @@
 import path from "path";
-import { Repo } from "./git";
-import { GIT_DIR_NAME, Sync } from "./sync";
-import { asBranchName, asLocalRef, asPath, Author, Hash, Path } from "./types";
+import { Repo } from "./git.js";
+import { Config, GIT_DIR_NAME, Sync } from "./sync.js";
+import { asBranchName, asLocalRef, asPath, Author, BranchName, Hash, Path } from "./types.js";
 import fs from "fs";
 
+export async function main() {
+    // 1st command line arg is either clone commit sync
+    // call corresponding function
+    const [,, command, ...args] = process.argv;
+    // pass current working directory as first argument
+    const cwd = process.cwd();
+    switch (command) {
+        case "clone":
+            if (args.length<2) {
+                console.log("clone serverUrl repoId");
+            }
+            const b=args[2]||"main";
+            await clone(cwd, args[0], args[1],b);
+            break;
+        case "commit":
+            await commit(cwd);
+            break;
+        case "sync":
+            await sync(cwd);
+            break;
+        case "log":
+            await log(cwd);
+            break;
+        default:
+            throw new Error(`Unknown command: ${command}`);
+    }
+}
 export async function clone(into:string,    serverUrl: string, repoId: string, branch="main") {
-    await Sync.clone(asPath(into), {serverUrl,repoId} , asBranchName(branch) );
+    await _clone(asPath(into), {serverUrl,repoId} , asBranchName(branch) );
+}
+
+async function _clone(into:Path, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME) {
+    if (fs.existsSync(into) && fs.readdirSync(into).length>0) {
+        throw new Error(`${into} is not empty.`);
+    }
+    console.log(`Cloning into ${into}...`);
+    if (!fs.existsSync(into)) fs.mkdirSync(into);
+    const newGitDir=asPath(path.join(into,gitDirName));
+    fs.mkdirSync(newGitDir);
+    const newSync=new Sync(newGitDir);
+    const repo=new Repo(newGitDir);
+    newSync.writeConfig(config);
+    await newSync.downloadObjects();
+    const headCommitHash=await newSync.getRemoteHead(branch);
+    repo.updateHead(asLocalRef(branch), headCommitHash );
+    const headCommit=await repo.readCommit(headCommitHash);
+    await repo.checkoutTreeToDir(headCommit.tree, into);
+    await repo.setCurrentBranchName(branch);
+    return newSync;
+
 }
 export function findGitDir(cwd: Path):Path {
     let c=cwd as string;
@@ -45,23 +93,19 @@ export async function commit(dir: string):Promise<Hash> {
 export async function sync(dir: string) {
 
     const localCommitHash=await commit(dir);
-    const sync=new Sync(findGitDir(asPath(dir)));
-    //const repo=sync.repo;
+    const gitDir = findGitDir(asPath(dir));
+    const sync=new Sync(gitDir);
+    const repo=new Repo(gitDir);
     const branch=await repo.getCurrentBranchName();
-    const remoteCommitHash=await sync.fetchHead(branch);
+    const remoteCommitHash=await sync.getRemoteHead(branch);
+    await sync.downloadObjects();
     const baseCommitHash=await repo.findMergeBase(localCommitHash, remoteCommitHash);
     if (remoteCommitHash===baseCommitHash) {
         // update remote
         await sync.uploadObjects();
         console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
-        //console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
-        const status=await sync.setRemoteHead(branch, remoteCommitHash, localCommitHash);
-        if (status==null) {
-            console.log("Pushed");
-        } else {
-            console.log("Remote commit id changed into ",status, "try again");
-        }
-        return ;        return ;
+        await sync.setRemoteHead(branch, remoteCommitHash, localCommitHash);
+        return ;
     }
     const localCommit=await repo.readCommit(localCommitHash);
     const remoteCommit=await repo.readCommit(remoteCommitHash);
@@ -83,17 +127,40 @@ export async function sync(dir: string) {
     if (conflicts.length==0) {
         console.log("Auto-Merged from ",remoteCommit);
         const mergedCommitHash=await commit(dir);
-        // update remote
-        console.log("Push into remote: ",remoteCommitHash, " to ",mergedCommitHash);
-        const status=await sync.setRemoteHead(branch, remoteCommit, mergedCommitHash);
-        if (status==null) {
-            console.log("Pushed");
-        } else {
-            console.log("Remote commit id changed into ",status, "try again");
-        }
-        return ;
+        console.log("Merged commit hash: ",mergedCommitHash);
+        console.log("Run sync again to push merged commit");       
     } else {
         console.log("CONFLICT");
-
+        for (let c of conflicts) {
+            const obj=await repo.readObject(c.b);
+            const postfix=`(${remoteCommitHash.substring(0,8)})`;
+            const newPath = makePostfix(c.path, postfix);
+            console.log(`Conflict saved at ${newPath}`);
+            fs.writeFileSync(asPath(newPath), obj.content);
+        }
+        console.log("Resolve conflicts and run sync again");
+    }
+}
+function makePostfix(filepath:string, postfix:string) {
+    // ex: filepath = "/a/b/test.txt"  postfix = "(1)"
+    //       returns "/a/b/test(1).txt"
+    //     filepath may either absolute or relative path
+    const ext = path.extname(filepath);
+    const basename = path.basename(filepath, ext);
+    const dirname = path.dirname(filepath);
+    const newBasename = `${basename}${postfix}${ext}`;
+    return path.join(dirname, newBasename);
+}
+export async function log(dir: string) {
+    
+    const gitDir = findGitDir(asPath(dir));
+    const repo=new Repo(gitDir);
+    const b=await repo.getCurrentBranchName();
+    let ch=await repo.readHead(asLocalRef(b));
+    while (ch) {
+        const c=await repo.readCommit(ch);
+        console.log(ch, c);
+        ch=c.parents[0];
+        if (c.parents[1]) console.log("Skipped merge commit: ",c.parents[1]);
     }
 }

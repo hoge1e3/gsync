@@ -72,17 +72,26 @@ export function asLocalRef(s:BranchName):Ref {
 }
 export type Ref=string&{[SymRef]:undefined};
 
-export type Conflict = { path: Path; base?: Hash; a?: Hash; b?: Hash };
+export type Conflict = { path: Path; base?: Hash; a: Hash; b: Hash };
 export type ObjectType = "commit" | "tree" | "blob" | "tag";
 export function isObjectType(type: string): type is ObjectType {
   return ['commit', 'tree', 'blob', 'tag'].includes(type);
 }
 export type TreeDiffEntry = {
   path: Path;
+} & ({ 
+    type: "added", newHash: Hash,
+}|{ 
+    type: "modified", oldHash: Hash, newHash: Hash,
+}|{ 
+    type: "deleted", oldHash: Hash
+});
+/*
+;
   type: 'added' | 'deleted' | 'modified';
   oldHash?: Hash;
   newHash?: Hash;
-};
+};*/
 
 // src/repo.ts の先頭付近
 export type TreeEntry = {
