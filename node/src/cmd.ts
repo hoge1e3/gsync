@@ -14,14 +14,16 @@ export async function main() {
     switch (command) {
         case "clone":
             if (args.length<2) {
-                console.log(process.argv.join(" ")+" clone <serverUrl> <repoId>");
+                console.log(process.argv.join(" ")+" <serverUrl> <repoId>");
+                return;
             }
             const b=args[2]||"main";
             await clone(cwd, args[0], args[1],b);
             break;
         case "init":
             if (args.length<1) {
-                console.log(process.argv.join(" ")+" init <serverUrl> ");
+                console.log(process.argv.join(" ")+" <serverUrl>");
+                return;
             }
             const serverUrl=args[0];
             await init(serverUrl);
