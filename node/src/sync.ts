@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs, { mkdir } from 'fs';
 import path from 'path';
 import axios from 'axios';
 import { asHash, asPath, BranchName, Hash, Path } from './types.js';
@@ -15,6 +15,22 @@ export type State = {
 export const GIT_DIR_NAME=".gsync";
 export class Sync {
     constructor(public gitDir: Path) { }
+    async init(serverUrl: string):Promise<string> {
+        if (fs.existsSync(this.gitDir)) {
+            throw new Error("Cannot init: "+this.gitDir+" already exists.");
+        }
+        // invoke create command (see /php/index.php)
+        // and return new repository id
+        const res = await axios.post(`${serverUrl}?action=create`);
+        // and write Config
+        const conf: Config = {
+            serverUrl,
+            repoId: res.data.repo_id,
+        };
+        await fs.promises.mkdir(this.gitDir, { recursive: true });
+        await this.writeConfig(conf);
+        return res.data.repo_id;
+    }
     /*private _repo:Repo|undefined;
     get repo():Repo{
         this._repo = this._repo || new Repo(this.gitDir);

@@ -3,6 +3,7 @@ import { Repo } from "./git.js";
 import { Config, GIT_DIR_NAME, Sync } from "./sync.js";
 import { asBranchName, asLocalRef, asPath, Author, BranchName, Hash, Path } from "./types.js";
 import fs from "fs";
+import { inherits } from "util";
 
 export async function main() {
     // 1st command line arg is either clone commit sync
@@ -13,13 +14,17 @@ export async function main() {
     switch (command) {
         case "clone":
             if (args.length<2) {
-                console.log(process.argv.join(" ")+" clone serverUrl repoId");
+                console.log(process.argv.join(" ")+" clone <serverUrl> <repoId>");
             }
             const b=args[2]||"main";
             await clone(cwd, args[0], args[1],b);
             break;
         case "init":
-            
+            if (args.length<1) {
+                console.log(process.argv.join(" ")+" init <serverUrl> ");
+            }
+            const serverUrl=args[0];
+            await init(serverUrl);
             break;
         case "commit":
             await commit(cwd);
@@ -33,6 +38,12 @@ export async function main() {
         default:
             throw new Error(`Unknown command: ${command}`);
     }
+}
+export async function init(serverUrl: string, gitDirName=GIT_DIR_NAME) {
+    const sync=new Sync(asPath(gitDirName));
+    const repoId=await sync.init(serverUrl);
+    console.log("Initialized new repository with id: ", repoId);
+    return repoId;
 }
 export async function clone(into:string,    serverUrl: string, repoId: string, branch="main") {
     await _clone(asPath(into), {serverUrl,repoId} , asBranchName(branch) );
