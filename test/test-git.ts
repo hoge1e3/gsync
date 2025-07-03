@@ -5,8 +5,8 @@ import { Sync } from "../src/sync.js";
 import { clone, commit, log, sync } from "../src/cmd.js";
 const branch_main = asBranchName("main");
 const localRef_main = asLocalRef(branch_main);
-/*
-export async function testCommit(){
+
+export async function testHash(){
     const repo=new Repo(asPath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
     //console.log(obj.type, obj.content);
@@ -18,9 +18,19 @@ export async function testCommit(){
     console.log(curTree);
     console.log("---last commit ---");
     for await (let e of repo.traverseTree(curTree)) {
-        console.log(e.path, e.hash, await newLineType(e.path, e.hash));
-        
+        console.log(e.path, e.hash, await newLineType(e.path, e.hash));        
     }
+    async function newLineType(path:RelPath, hash:Hash) {
+        if (path.match(/\.(js|ts|json)$/)) {
+            const text=await repo.readBlobAsText(hash);
+            if (text.includes("\r\n")) return ("CR+LF");
+            else if (text.includes("\n")) return ("LF");
+            return "Oneline";
+        } 
+        return "bin";
+    }
+}
+/*
     console.log("---current working dir ---");
     const bt=await repo.buildTreeFromWorkingDir();
     for await (let e of repo.traverseTree(bt)) {
@@ -36,15 +46,7 @@ export async function testCommit(){
     });
     await repo.updateHead(localRef_main, newCommitHash);
 
-    async function newLineType(path:RelPath, hash:Hash) {
-        if (path.match(/\.(js|ts|json)$/)) {
-            const text=await repo.readBlobAsText(hash);
-            if (text.includes("\r\n")) return ("CR+LF");
-            else if (text.includes("\n")) return ("LF");
-            return "Oneline";
-        } 
-        return "bin";
-    }
+    
 }    
 async function testMerge() {
     const repo=new Repo(asPath(".git"));
@@ -80,13 +82,13 @@ async function test_sync(name="clonetes") {
 }
 async function main() {
     //await test_clone();
-    //await test_commit();
+    await testHash();
     //await test_sync();
     //await test_clone("clonetes2");
     //await test_commit("clonetes2");
     //await test_sync("clonetes2");
     
-    await test_sync();
+    //await test_sync();
     
     //await log("js/test/fixture/clonetes");
 }

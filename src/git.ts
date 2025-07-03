@@ -1,14 +1,14 @@
 // @acepad/git
 import fs from 'fs';
 import path from 'path';
-import zlib from 'zlib';
-import crypto from 'crypto';
+/*import zlib from 'zlib';
+import crypto from 'crypto';*/
 import ignore from 'ignore';
-import { promisify } from 'util';
+//import { promisify } from 'util';
 import { asFilename, asHash, asMode, asPath, asRelPath, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef } from './types.js';
-
-const inflate = promisify(zlib.inflate);
-const deflate = promisify(zlib.deflate);
+import { inflate, deflate ,sha1Hex } from './codec.js';
+/*const inflate = promisify(zlib.inflate);
+const deflate = promisify(zlib.deflate);*/
 export class Repo {
   constructor(public gitDir: Path) { }
 
@@ -21,7 +21,7 @@ export class Repo {
   async readObject(hash: Hash): Promise<GitObject> {
     const filePath = this.getObjectPath(hash);
     const compressed = await fs.promises.readFile(filePath);
-    const data = await inflate(compressed);
+    const data = Buffer.from(await inflate(compressed));
 
     const nullIndex = data.indexOf(0);
     const header = data.subarray(0, nullIndex).toString();
@@ -41,10 +41,10 @@ export class Repo {
   async writeObject(type: ObjectType, content: Buffer): Promise<Hash> {
     const header = `${type} ${content.length}\0`;
     const store = Buffer.concat([Buffer.from(header), content]);
-    const hash = asHash( crypto.createHash('sha1').update(store).digest('hex') );
+    const hash = asHash( await sha1Hex(store));// crypto.createHash('sha1').update(store).digest('hex') );
 
     const filePath = this.getObjectPath(hash);
-    if (await fs.promises.access(filePath).then(() => true).catch(() => false)) {
+    if (fs.existsSync(filePath)) {
       return hash; // 既に存在する場合はそのまま返す
     }
     const dirPath = path.dirname(filePath);
@@ -56,11 +56,11 @@ export class Repo {
     return hash;
   }
 
-  hashObject(type: ObjectType, content: Buffer): Hash {
+  /*async hashObject(type: ObjectType, content: Buffer): Promise<Hash> {
     const header = `${type} ${content.length}\0`;
     const store = Buffer.concat([Buffer.from(header), content]);
-    return asHash( crypto.createHash('sha1').update(store).digest('hex') );
-  }
+    return asHash( await sha1Hex(store) );// crypto.createHash('sha1').update(store).digest('hex')
+  }*/
 
   async readBlobAsText(hash: Hash): Promise<string> {
     const { type, content } = await this.readObject(hash);
