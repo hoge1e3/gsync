@@ -42,9 +42,12 @@ export async function main() {
     }
 }
 export async function init(serverUrl: string, gitDirName=GIT_DIR_NAME) {
-    const sync=new Sync(asPath(gitDirName));
+    const gitDir=asPath(gitDirName);
+    const sync=new Sync(gitDir);
     const repoId=await sync.init(serverUrl);
     console.log("Initialized new repository with id: ", repoId);
+    const repo=new Repo(gitDir);
+    repo.setCurrentBranchName(asBranchName("main"));
     return repoId;
 }
 export async function clone(into:string,    serverUrl: string, repoId: string, branch="main") {
@@ -83,6 +86,9 @@ export function findGitDir(cwd: Path):Path {
 }
 export async function commit(dir: string):Promise<Hash> {
     const repo=new Repo(findGitDir(asPath(dir)));
+    if (!fs.existsSync(repo.headPath())) {
+        await repo.setCurrentBranchName(asBranchName("main"));
+    }
     const branch=await repo.getCurrentBranchName();
     const ref=asLocalRef(branch);
     const tree=await repo.buildTreeFromWorkingDir();

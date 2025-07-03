@@ -436,7 +436,7 @@ export class Repo {
     }
   }
   async getCurrentBranchName(): Promise<BranchName> {
-    const headPath = path.join(this.gitDir, 'HEAD');
+    const headPath = this.headPath();
     const content = await fs.promises.readFile(headPath, 'utf8');
 
     const match = content.match(/^ref: refs\/heads\/(.+)\s*$/);
@@ -448,8 +448,12 @@ export class Repo {
       //return null;
     }
   }
+  headPath() {
+    return path.join(this.gitDir, 'HEAD');
+  }
+
   async setCurrentBranchName(branch:BranchName): Promise<void> {
-    const headPath = path.join(this.gitDir, 'HEAD');
+    const headPath = this.headPath();
     const refPath = asLocalRef(branch);
     const content = `ref: ${refPath}\n`;
     await fs.promises.writeFile(headPath, content, 'utf8');
