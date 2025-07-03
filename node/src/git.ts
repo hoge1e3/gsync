@@ -154,6 +154,7 @@ export class Repo {
         }
 
         const fullPath = asPath( path.join(dir, name) );
+        console.log("Add" , fullPath);
         const stat = await fs.promises.stat(fullPath);
 
         if (file.isFile()) {
@@ -240,8 +241,9 @@ export class Repo {
   async writeCommit(entry: CommitEntry) {
     return await this.writeObject("commit", this.encodeCommit(entry));
   }
-  async readHead(ref: Ref): Promise<Hash> {
+  async readHead(ref: Ref): Promise<Hash|null> {
     const refPath = path.join(this.gitDir, ref);
+    if (!fs.existsSync(refPath)) return null;
     const data = await fs.promises.readFile(refPath, 'utf-8');
     const hash = asHash(data.trim());
     return hash;

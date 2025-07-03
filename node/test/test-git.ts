@@ -12,8 +12,9 @@ export async function testHash(){
     //console.log(obj.type, obj.content);
     const curCommitHash=await repo.readHead(localRef_main);
     console.log(curCommitHash);
-    const curCommit=await repo.readCommit(curCommitHash);
+    const curCommit=curCommitHash? await repo.readCommit(curCommitHash):null;
     console.log(curCommit);
+    if (!curCommit) return;
     const curTree=await repo.readTree(curCommit.tree);
     console.log(curTree);
     console.log("---last commit ---");
