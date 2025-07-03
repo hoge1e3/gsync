@@ -13,10 +13,13 @@ export async function main() {
     switch (command) {
         case "clone":
             if (args.length<2) {
-                console.log("clone serverUrl repoId");
+                console.log(process.argv.join(" ")+" clone serverUrl repoId");
             }
             const b=args[2]||"main";
             await clone(cwd, args[0], args[1],b);
+            break;
+        case "init":
+            
             break;
         case "commit":
             await commit(cwd);
