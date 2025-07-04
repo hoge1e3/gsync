@@ -1,1 +1,1 @@
-node node/js/src/bin.js %*
+node node/bin.js %*

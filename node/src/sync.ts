@@ -147,6 +147,17 @@ export class Sync {
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
     }
+    async hasRemoteHead(branch: BranchName):Promise<boolean> {
+        const { repoId, serverUrl } = await this.readConfig();
+        const res = await axios.post(`${serverUrl}?action=get_head`, {
+            repo_id: repoId,
+            allow_nonexistent: 1,
+            branch
+        });
+        return !!res.data.hash;
+    }
+
+
     async getRemoteHead(branch: BranchName): Promise<Hash> {
         const { repoId, serverUrl } = await this.readConfig();
 
@@ -163,7 +174,6 @@ export class Sync {
     async setRemoteHead(branch: BranchName, current:Hash, next:Hash): Promise<void> {
         const { repoId, serverUrl } = await this.readConfig();
         //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
-
         const {data}=await axios.post(`${serverUrl}?action=set_head`, {
             repo_id: repoId,
             branch,
@@ -171,10 +181,21 @@ export class Sync {
         });
         if (data.status==="ok") {
             return ;
-            //console.log(`Pushed HEAD of '${branch}' from ${current} to ${next}`);
-            //return null;
         }
         throw new Error("Atomic change failed: Someone changed the head to "+data.status);
+    }
+    async addRemoteHead(branch: BranchName, next:Hash): Promise<void> {
+        const { repoId, serverUrl } = await this.readConfig();
+        //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
+        const {data}=await axios.post(`${serverUrl}?action=set_head`, {
+            repo_id: repoId,
+            branch,
+            next,
+        });
+        if (data.status==="ok") {
+            return ;
+        }
+        throw new Error(branch+" already exists");
     }
 }
 /*

@@ -136,6 +136,13 @@ export async function sync(dir: string) {
     const sync=new Sync(gitDir);
     const repo=new Repo(gitDir);
     const branch=await repo.getCurrentBranchName();
+    if (!await sync.hasRemoteHead(branch)) {
+        // push to remote(new)
+        await sync.uploadObjects();
+        console.log("Push ",branch, " into ", localCommitHash);
+        await sync.addRemoteHead(branch, localCommitHash);
+        return ;
+    }
     const remoteCommitHash=await sync.getRemoteHead(branch);
     await sync.downloadObjects();
     const baseCommitHash=await repo.findMergeBase(localCommitHash, remoteCommitHash);
