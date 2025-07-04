@@ -1,7 +1,7 @@
 import path from "path";
 import { Repo } from "./git.js";
 import { Config, GIT_DIR_NAME, Sync } from "./sync.js";
-import { asBranchName, asLocalRef, asPath, Author, BranchName, Hash, Path } from "./types.js";
+import { asBranchName, asHash, asLocalRef, asPath, Author, BranchName, Hash, Path } from "./types.js";
 import fs from "fs";
 import { inherits } from "util";
 
@@ -37,9 +37,24 @@ export async function main() {
         case "log":
             await log(cwd);
             break;
+        case "cat-file":
+            await catFile(cwd, args[0]);
+            break;
         default:
             throw new Error(`Unknown command: ${command}`);
     }
+}
+export async function catFile(dir: string, hash: string ) {
+    const repo=new Repo(findGitDir(asPath(dir)));
+    const obj=await repo.readObject(asHash(hash));
+    if (!obj) {
+        console.log("No such object: ", hash);
+        return;
+    }
+    console.log("Type: ", obj.type);
+    console.log("Content: ");
+    console.log(obj.content.toString());
+    
 }
 export async function init(serverUrl: string, gitDirName=GIT_DIR_NAME) {
     const gitDir=asPath(gitDirName);

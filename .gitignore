@@ -3,3 +3,4 @@ node/node_modules
 node/packs
 php/storage
 .gsync
+.tsbuildinfo

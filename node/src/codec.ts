@@ -15,7 +15,7 @@ async function loadNodeLibs(){
     loaded={createDeflate, createInflate, Readable, Buffer, createHash}; 
     return loaded;
 }
-export async function deflate(uint8array:Uint8Array):Promise<Uint8Array> {
+export async function deflate(uint8array:Uint8Array<ArrayBuffer>):Promise<Uint8Array> {
   if (typeof CompressionStream !== 'undefined') {
     // --- ブラウザ環境 ---
     const stream = new Blob([uint8array])
@@ -42,7 +42,7 @@ export async function deflate(uint8array:Uint8Array):Promise<Uint8Array> {
   }
 }
 
-export async function inflate(uint8array:Uint8Array):Promise<Uint8Array> {
+export async function inflate(uint8array:Uint8Array<ArrayBuffer>):Promise<Uint8Array> {
   if (typeof DecompressionStream !== 'undefined') {
     // --- ブラウザ環境 ---
     const stream = new Blob([uint8array])
@@ -69,7 +69,7 @@ export async function inflate(uint8array:Uint8Array):Promise<Uint8Array> {
   }
 }
 
-export async function sha1Hex(input:Uint8Array):Promise<string> {
+export async function sha1Hex(input:Uint8Array<ArrayBuffer>):Promise<string> {
   const buffer = input;
   if (typeof crypto !== 'undefined' && crypto.subtle) {
     const hashBuffer = await crypto.subtle.digest('SHA-1', buffer.buffer);

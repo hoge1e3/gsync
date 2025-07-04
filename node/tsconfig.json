@@ -2,7 +2,7 @@
     "compilerOptions": {
       "sourceMap": true,
       "target": "esnext",
-      "lib": ["es2021"],
+      "lib": ["ESNext"],
       "module": "esnext",
       //"allowImportingTsExtensions": true,
       //"noEmit": true,
@@ -10,7 +10,9 @@
       "declaration": true,
       "strict": true,
       "outDir":"./js",
-      "allowSyntheticDefaultImports":true
+      "allowSyntheticDefaultImports":true,
+      "incremental": true,
+      "tsBuildInfoFile": "./.tsbuildinfo",
     },
     "include": ["src","test"]
   }

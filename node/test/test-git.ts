@@ -1,11 +1,47 @@
-import { asPath, Author, Hash, RelPath, TreeEntry, asLocalRef, asBranchName} from "../src/types.js";
+import { asPath, Author, Hash, RelPath, TreeEntry, asLocalRef, asBranchName, asHash, ObjectType} from "../src/types.js";
 import * as assert from "assert";
 import { Repo } from "../src/git.js";
 import { Sync } from "../src/sync.js";
 import { clone, commit, log, sync } from "../src/cmd.js";
+import { sha1Hex } from "../src/codec.js";
+import _crypto from 'crypto';
 const branch_main = asBranchName("main");
 const localRef_main = asLocalRef(branch_main);
 
+export async function testHash2(){
+    const repo=new Repo(asPath("../.gsync"));
+    const obj1=await repo.readObject(asHash("4b4a31ee8f73a2aad9045b32e996a5762e575982"));
+    const obj2=await repo.readObject(asHash("eca5de281828d1b28e39f8866464003d3a7c7f4f"));
+
+
+    const b1=obj1.content;
+    const hash1=await _crypto.createHash('sha1').update(b1).digest('hex');
+    const hashBuffer = await crypto.subtle.digest('SHA-1', new Uint8Array(b1).buffer);
+    const hash2= [...new Uint8Array(hashBuffer)]
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    console.log(hash1, hash2);
+    return;
+    const b2=obj2.content;
+    console.log(b1.length,b2.length);
+    for (let i=0;i<b1.length;i++) {
+        if (b1[i]!==b2[i]) console.log(i, b1[i],b2[i]);
+    }
+    const h1=await repo.writeObject("blob", b1);
+    const h2=await repo.writeObject("blob", b2);
+    const h3=await repo.writeObject("blob", b1);
+    const h4=await repo.writeObject("blob", b2);
+    /*const h1=await sha1Hex(new Uint8Array(b1));
+    const h2=await sha1Hex(new Uint8Array(b2));*/
+    console.log(h1, h2, h3, h4);
+}
+async function writeObject(type: ObjectType, content: Buffer): Promise<Hash> {
+    const header = `${type} ${content.length}\0`;
+    const store = Buffer.concat([Buffer.from(header), content]);
+    console.log(store);
+    const hash = asHash( await sha1Hex(new Uint8Array(store)));
+    return hash;
+}
 export async function testHash(){
     const repo=new Repo(asPath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
@@ -83,7 +119,7 @@ async function test_sync(name="clonetes") {
 }
 async function main() {
     //await test_clone();
-    await testHash();
+    await testHash2();
     //await test_sync();
     //await test_clone("clonetes2");
     //await test_commit("clonetes2");

@@ -21,7 +21,7 @@ export class Repo {
   async readObject(hash: Hash): Promise<GitObject> {
     const filePath = this.getObjectPath(hash);
     const compressed = await fs.promises.readFile(filePath);
-    const data = Buffer.from(await inflate(compressed));
+    const data = Buffer.from(await inflate(new Uint8Array(compressed)));
 
     const nullIndex = data.indexOf(0);
     const header = data.subarray(0, nullIndex).toString();
@@ -40,7 +40,7 @@ export class Repo {
 
   async writeObject(type: ObjectType, content: Buffer): Promise<Hash> {
     const header = `${type} ${content.length}\0`;
-    const store = Buffer.concat([Buffer.from(header), content]);
+    const store = new Uint8Array(Buffer.concat([Buffer.from(header), content]));
     const hash = asHash( await sha1Hex(store));// crypto.createHash('sha1').update(store).digest('hex') );
 
     const filePath = this.getObjectPath(hash);
@@ -154,16 +154,21 @@ export class Repo {
         }
 
         const fullPath = asPath( path.join(dir, name) );
-        console.log("Add" , fullPath);
         const stat = await fs.promises.stat(fullPath);
 
         if (file.isFile()) {
           const content = await fs.promises.readFile(fullPath);
+          if (fullPath.includes("codec.ts") || fullPath.includes("tsconfig.json")) {
+            console.log(content);
+          }
           const hash = await this.writeObject('blob', content);
+          console.log("File" , fullPath, hash);
+
           entries.push({ mode: '100644', name, hash });
         } else if (file.isDirectory()) {
           const childEntries = await walk(fullPath);
           const treeHash = await this.writeTree(childEntries);
+          console.log("Dir" , fullPath, treeHash);
           entries.push({ mode: '40000', name, hash: treeHash });
         }
       }
