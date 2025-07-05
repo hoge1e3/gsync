@@ -1,5 +1,5 @@
 {
-    "name": "@acepad/git",
+    "name": "@acepad/gsync",
     "scripts": {
         "build": "npx tsc",
         "test": "npm run build && node js/test/test-git.js"

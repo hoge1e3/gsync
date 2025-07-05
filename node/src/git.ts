@@ -158,17 +158,14 @@ export class Repo {
 
         if (file.isFile()) {
           const content = await fs.promises.readFile(fullPath);
-          if (fullPath.includes("codec.ts") || fullPath.includes("tsconfig.json")) {
-            console.log(content);
-          }
           const hash = await this.writeObject('blob', content);
-          console.log("File" , fullPath, hash);
+          //console.log("File" , fullPath, hash);
 
           entries.push({ mode: '100644', name, hash });
         } else if (file.isDirectory()) {
           const childEntries = await walk(fullPath);
           const treeHash = await this.writeTree(childEntries);
-          console.log("Dir" , fullPath, treeHash);
+          //console.log("Dir" , fullPath, treeHash);
           entries.push({ mode: '40000', name, hash: treeHash });
         }
       }
