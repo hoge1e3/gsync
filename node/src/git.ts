@@ -123,54 +123,50 @@ export class Repo {
 
   async buildTreeFromWorkingDir(): Promise<TreeEntry[]> {
     const workingDir = asPath( path.resolve(this.gitDir, '..') );
-    const ig = ignore();
-
-    // .gitignore を読み込む（存在する場合）
-    const gitignorePath = path.join(workingDir, '.gitignore');
-    try {
-      const ignoreContent = await fs.promises.readFile(gitignorePath, 'utf8');
-      ig.add(ignoreContent);
-    } catch {
-      // .gitignore がない場合は無視
-    }
+    const ig = new RecursiveGitIgnore();
     const base=path.basename(this.gitDir);
     const walk = async (dir: Path): Promise<TreeEntry[]> => {
-      const entries: TreeEntry[] = [];
-      const files = await fs.promises.readdir(dir, { withFileTypes: true });
+      ig.push(dir);
+      try {
+        const entries: TreeEntry[] = [];
+        const files = await fs.promises.readdir(dir, { withFileTypes: true });
+        for (const file of files) {
+          const name = asFilename(file.name);
+          const fullPath = asPath(path.join(dir, name));
+          const relPath = path.relative(workingDir, fullPath);
 
-      for (const file of files) {
-        const name = asFilename(file.name);
-        const relPath = path.relative(workingDir, path.join(dir, name));
+          // 除外対象（.gitignore + .git フォルダ）をスキップ
+          if (
+            ig.ignores(fullPath) ||
+            relPath === base ||
+            relPath.startsWith(base + path.sep) ||
+            relPath === '.git' ||
+            relPath.startsWith('.git' + path.sep)
+          ) {
+            //console.log("Ignored ",fullPath);
+            continue;
+          }
 
-        // 除外対象（.gitignore + .git フォルダ）をスキップ
-        if (
-          ig.ignores(relPath) ||
-          relPath === base ||
-          relPath.startsWith(base + path.sep) ||
-          relPath === '.git' ||
-          relPath.startsWith('.git' + path.sep)
-        ) {
-          continue;
+          //const fullPath = asPath( path.join(dir, name) );
+          //const stat = await fs.promises.stat(fullPath);
+
+          if (file.isFile()) {
+            const content = await fs.promises.readFile(fullPath);
+            const hash = await this.writeObject('blob', content);
+            //console.log("File" , fullPath, hash);
+
+            entries.push({ mode: '100644', name, hash });
+          } else if (file.isDirectory()) {
+            const childEntries = await walk(fullPath);
+            const treeHash = await this.writeTree(childEntries);
+            //console.log("Dir" , fullPath, treeHash);
+            entries.push({ mode: '40000', name, hash: treeHash });
+          }
         }
-
-        const fullPath = asPath( path.join(dir, name) );
-        const stat = await fs.promises.stat(fullPath);
-
-        if (file.isFile()) {
-          const content = await fs.promises.readFile(fullPath);
-          const hash = await this.writeObject('blob', content);
-          //console.log("File" , fullPath, hash);
-
-          entries.push({ mode: '100644', name, hash });
-        } else if (file.isDirectory()) {
-          const childEntries = await walk(fullPath);
-          const treeHash = await this.writeTree(childEntries);
-          //console.log("Dir" , fullPath, treeHash);
-          entries.push({ mode: '40000', name, hash: treeHash });
-        }
+        return entries;
+      } finally{
+        ig.pop();
       }
-
-      return entries;
     };
 
     return await walk(workingDir);
@@ -494,5 +490,37 @@ export class Repo {
         await fs.promises.writeFile(filePath, content);
       }
     }
+  }
+}
+
+export class RecursiveGitIgnore{
+  stack=[] as {
+    dir:Path,
+    ig:ignore.Ignore;
+  }[];
+  ignores(file:Path):boolean{
+    for (const {ig, dir} of this.stack) {
+      if (file.startsWith(dir)) {
+        const rel=path.relative(dir, file);
+        //console.log("ignores", dir, rel);
+        if(rel!=="" && ig.ignores(rel)) return true;
+      }
+    }
+    return false; // デフォルトは無視しない
+  }
+  push(dir:Path){
+    const ig=ignore();
+    // .gitignore を読み込む（存在する場合）
+    const gitignorePath = path.join(dir, '.gitignore');
+    try {
+      const ignoreContent = fs.readFileSync(gitignorePath, 'utf8');
+      ig.add(ignoreContent);
+    } catch {
+      // .gitignore がない場合は無視
+    }
+    this.stack.push({ig, dir});
+  }
+  pop(){
+    this.stack.pop();
   }
 }
