@@ -4,6 +4,9 @@
         "build": "npx tsc",
         "test": "npm run build && node js/test/test-git.js"
     },
+    "bin": {
+        "gsync": "./bin.js"
+    },
     "main": "git.js",
     "version": "1.0.0",
     "type": "module",

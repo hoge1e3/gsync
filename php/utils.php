@@ -92,7 +92,7 @@ function downloadObjects(array $data): array {
 function getHead(array $data): ?string {
     $repo_id = $data['repo_id'];
     $branch = $data['branch'];
-    $allow_nonexistent= $data["allow_nonexistent"];
+    $allow_nonexistent= $data["allow_nonexistent"] ?? false;
     $head_path = REPO_DIR . "/$repo_id/refs/heads/$branch";
     if (!file_exists($head_path)) {
         if ($allow_nonexistent) return null;
