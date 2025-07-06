@@ -195,7 +195,7 @@ export class Sync {
         if (data.status==="ok") {
             return ;
         }
-        throw new Error(branch+" already exists");
+        throw new Error(branch+" already exists. status="+data.status);
     }
 }
 /*

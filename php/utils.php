@@ -114,6 +114,9 @@ function setHead(array $data): string {
     $head_path = "$heads_dir/$branch";
     if (file_exists($head_path)) {
         $real_current=file_get_contents($head_path);
+        if ($current==null) {
+            e505("$current is null");
+        }
         if ($real_current!==$current) {
             return $real_current;//"prev hash does not match: set $branch to $next";
         }
@@ -124,6 +127,15 @@ function setHead(array $data): string {
         file_put_contents("$head_path." . time(), $old);
     }*/
 
-    file_put_contents($head_path, $next);
+    if (!file_put_contents($head_path, $next)) {
+        e505("Cannot write to $head_path=$next");
+    };
     return "ok";
+}
+function parseJson($str) {
+    $r=json_decode($str);
+    if ($r===null) {
+        throw new Exception("Cannot parse json: $str");
+    }
+    return $r;
 }
