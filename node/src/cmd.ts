@@ -32,6 +32,7 @@ export async function main() {
             await commit(cwd);
             break;
         case "sync":
+        case undefined:
             await sync(cwd);
             break;
         case "log":
@@ -151,6 +152,10 @@ export async function sync(dir: string) {
     const baseCommitHash=await repo.findMergeBase(localCommitHash, remoteCommitHash);
     if (remoteCommitHash===baseCommitHash) {
         // update remote
+        if (localCommitHash===remoteCommitHash) {
+            console.log("Remote is up-to-date: ",localCommitHash);
+            return;
+        }
         await sync.uploadObjects();
         console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
         await sync.setRemoteHead(branch, remoteCommitHash, localCommitHash);
