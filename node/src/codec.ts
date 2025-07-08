@@ -72,7 +72,8 @@ export async function inflate(uint8array:Uint8Array<ArrayBuffer>):Promise<Uint8A
 export async function sha1Hex(input:Uint8Array<ArrayBuffer>):Promise<string> {
   const buffer = input;
   if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const hashBuffer = await crypto.subtle.digest('SHA-1', buffer.buffer);
+    // buffer.buffer refers raw buffer(when input is node Buffer), offset is not match. 
+    const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
     return [...new Uint8Array(hashBuffer)]
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
