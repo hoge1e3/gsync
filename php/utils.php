@@ -56,7 +56,7 @@ function downloadObjects(array $data): array {
 
     if (!is_dir($repo_path)) {
         http_response_code(404);
-        exit(json_encode(['error' => 'Repo not found']));
+        exit(json_encode(['error' => 'Repo $repo_id not found']));
     }
 
     $result = [];
@@ -92,10 +92,12 @@ function downloadObjects(array $data): array {
 function getHead(array $data): ?string {
     $repo_id = $data['repo_id'];
     $branch = $data['branch'];
+    $allow_nonexistent= $data["allow_nonexistent"] ?? false;
     $head_path = REPO_DIR . "/$repo_id/refs/heads/$branch";
     if (!file_exists($head_path)) {
+        if ($allow_nonexistent) return null;
         http_response_code(404);
-        exit(json_encode(['error' => '$repo_id:$branch not found']));
+        exit(json_encode(['error' => "$repo_id:$branch not found"]));
     }
     return trim(file_get_contents($head_path));
 }
@@ -103,16 +105,21 @@ function getHead(array $data): ?string {
 function setHead(array $data): string {
     $repo_id = $data['repo_id'];
     $branch = $data['branch'];
-    $current = $data['current'];
+    $current = $data['current'] ?? null;
     $next = $data['next'];
     $heads_dir=REPO_DIR . "/$repo_id/refs/heads";
     if (!is_dir($heads_dir)) {
         mkdir($heads_dir, 0777, true);
     }
     $head_path = "$heads_dir/$branch";
-    $real_current=file_get_contents($head_path);
-    if ($real_current!==$current) {
-        return $real_current;//"prev hash does not match: set $branch to $next";
+    if (file_exists($head_path)) {
+        $real_current=file_get_contents($head_path);
+        if ($current==null) {
+            e505("$current is null");
+        }
+        if ($real_current!==$current) {
+            return $real_current;//"prev hash does not match: set $branch to $next";
+        }
     }
     // 履歴を残す（タイムスタンプ付きバックアップ）
     /*if (file_exists($head_path)) {
@@ -120,6 +127,15 @@ function setHead(array $data): string {
         file_put_contents("$head_path." . time(), $old);
     }*/
 
-    file_put_contents($head_path, $next);
+    if (!file_put_contents($head_path, $next)) {
+        e505("Cannot write to $head_path=$next");
+    };
     return "ok";
+}
+function parseJson($str) {
+    $r=json_decode($str, true);
+    if ($r===null) {
+        throw new Exception("Cannot parse json: $str");
+    }
+    return $r;
 }

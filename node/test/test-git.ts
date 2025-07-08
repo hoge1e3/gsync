@@ -1,15 +1,42 @@
-import { asPath, Author, Hash, RelPath, TreeEntry, asLocalRef, asBranchName, asHash, ObjectType} from "../src/types.js";
+import { asPath, Author, Hash, RelPath, TreeEntry, asLocalRef, asBranchName, asHash, ObjectType, Path} from "../src/types.js";
 import * as assert from "assert";
-import { Repo } from "../src/git.js";
+import { RecursiveGitIgnore, Repo } from "../src/git.js";
 import { Sync } from "../src/sync.js";
 import { clone, commit, log, sync } from "../src/cmd.js";
 import { sha1Hex } from "../src/codec.js";
 import _crypto from 'crypto';
 const branch_main = asBranchName("main");
 const localRef_main = asLocalRef(branch_main);
-
+import path from "path";
+import fs from "fs";
 export async function testHash2(){
     const repo=new Repo(asPath("../.gsync"));
+    const ig=new RecursiveGitIgnore();
+    const walk=(dir:Path)=>{
+        ig.push(dir);
+        //console.log("ig",ig);
+        const files = fs.readdirSync(dir, { withFileTypes: true });
+        for (const file of files) {
+            const fullPath = asPath(path.join(dir, file.name));
+            if (ig.ignores(fullPath)||file.name===(".git")) {
+                console.log("Ignores" ,fullPath);
+                continue;
+            }
+            if (file.name==="node_modules") {
+                console.log(ig.stack);
+                throw new Error("node!!");
+            }
+            if (fs.statSync(fullPath).isDirectory()){
+                walk(fullPath);
+            } else {
+                console.log(fullPath);
+            }
+        }
+        ig.pop();
+    };
+    walk(asPath(path.dirname(repo.gitDir)));
+    return;
+
     const obj1=await repo.readObject(asHash("4b4a31ee8f73a2aad9045b32e996a5762e575982"));
     const obj2=await repo.readObject(asHash("eca5de281828d1b28e39f8866464003d3a7c7f4f"));
 

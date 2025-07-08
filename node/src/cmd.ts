@@ -57,6 +57,9 @@ export async function catFile(dir: string, hash: string ) {
     
 }
 export async function init(serverUrl: string, gitDirName=GIT_DIR_NAME) {
+    if (!serverUrl.endsWith(".php") && !serverUrl.endsWith("/")){
+        console.warn(`${serverUrl} should be ends with .php or / `);
+    }
     const gitDir=asPath(gitDirName);
     const sync=new Sync(gitDir);
     const repoId=await sync.init(serverUrl);
@@ -79,7 +82,7 @@ async function _clone(into:Path, config:Config,  branch: BranchName, gitDirName=
     fs.mkdirSync(newGitDir);
     const newSync=new Sync(newGitDir);
     const repo=new Repo(newGitDir);
-    newSync.writeConfig(config);
+    await newSync.writeConfig(config);
     await newSync.downloadObjects();
     const headCommitHash=await newSync.getRemoteHead(branch);
     repo.updateHead(asLocalRef(branch), headCommitHash );
@@ -136,6 +139,13 @@ export async function sync(dir: string) {
     const sync=new Sync(gitDir);
     const repo=new Repo(gitDir);
     const branch=await repo.getCurrentBranchName();
+    if (!await sync.hasRemoteHead(branch)) {
+        // push to remote(new)
+        await sync.uploadObjects();
+        console.log("Push ",branch, " into ", localCommitHash);
+        await sync.addRemoteHead(branch, localCommitHash);
+        return ;
+    }
     const remoteCommitHash=await sync.getRemoteHead(branch);
     await sync.downloadObjects();
     const baseCommitHash=await repo.findMergeBase(localCommitHash, remoteCommitHash);

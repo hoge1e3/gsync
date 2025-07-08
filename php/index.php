@@ -1,9 +1,7 @@
 <?php
 require_once "ErrorHandler.php";
 require_once 'utils.php';
-
 header("Content-Type: application/json");
-
 $method = $_SERVER['REQUEST_METHOD'];
 $path = $_GET['action'] ?? '';
 
@@ -13,23 +11,24 @@ switch ($path) {
         break;
 
     case 'upload':
-        $input = json_decode(file_get_contents('php://input'), true);
+        $input = parseJson(file_get_contents('php://input'));
         echo json_encode(['timestamp' => uploadObjects($input)]);
         break;
 
     case 'download':
-        $input = json_decode(file_get_contents('php://input'), true);
+        $input = parseJson(file_get_contents('php://input'));
         echo json_encode(downloadObjects($input));
         break;
 
     case 'get_head':
-        $input = json_decode(file_get_contents('php://input'), true);
+        $input = parseJson(file_get_contents('php://input'));
         echo json_encode(['hash' => getHead($input)]);
         break;
 
     case 'set_head':
-        $input = json_decode(file_get_contents('php://input'), true);
+        $input = parseJson(file_get_contents('php://input'));
         $status = setHead($input);
+        if (!$status) e505("Status is null :".json_encode(($input)));
         echo json_encode(['status' => $status]);
         break;
 

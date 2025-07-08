@@ -1,6 +1,5 @@
 import fs, { mkdir } from 'fs';
 import path from 'path';
-import axios from 'axios';
 import { asHash, asPath, BranchName, Hash, Path } from './types.js';
 
 
@@ -13,6 +12,13 @@ export type State = {
     uploadSince: number,
 };
 export const GIT_DIR_NAME=".gsync";
+export async function postJson(url:string, data={}){
+    const response=await fetch(url, {method:"POST", body:JSON.stringify(data)});
+    if (response.status!==200) {
+        throw new Error(await response.text());
+    }
+    return {data: (await response.json()) as any};
+}
 export class Sync {
     constructor(public gitDir: Path) { }
     async init(serverUrl: string):Promise<string> {
@@ -21,7 +27,7 @@ export class Sync {
         }
         // invoke create command (see /php/index.php)
         // and return new repository id
-        const res = await axios.post(`${serverUrl}?action=create`);
+        const res = await postJson(`${serverUrl}?action=create`);
         // and write Config
         const conf: Config = {
             serverUrl,
@@ -99,7 +105,7 @@ export class Sync {
         }
         //console.log(objects);
 
-        const res = await axios.post(`${config.serverUrl}?action=upload`, {
+        const res = await postJson(`${config.serverUrl}?action=upload`, {
             repo_id: config.repoId,
             objects
         });
@@ -113,7 +119,7 @@ export class Sync {
         const state = await this.readState();
         const objectsDir = path.join(this.gitDir, 'objects');
 
-        const res = await axios.post(`${config.serverUrl}?action=download`, {
+        const res = await postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
             since: state.downloadSince,
         });
@@ -147,10 +153,21 @@ export class Sync {
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
     }
+    async hasRemoteHead(branch: BranchName):Promise<boolean> {
+        const { repoId, serverUrl } = await this.readConfig();
+        const res = await postJson(`${serverUrl}?action=get_head`, {
+            repo_id: repoId,
+            allow_nonexistent: 1,
+            branch
+        });
+        return !!res.data.hash;
+    }
+
+
     async getRemoteHead(branch: BranchName): Promise<Hash> {
         const { repoId, serverUrl } = await this.readConfig();
 
-        const res = await axios.post(`${serverUrl}?action=get_head`, {
+        const res = await postJson(`${serverUrl}?action=get_head`, {
             repo_id: repoId,
             branch
         });
@@ -163,18 +180,28 @@ export class Sync {
     async setRemoteHead(branch: BranchName, current:Hash, next:Hash): Promise<void> {
         const { repoId, serverUrl } = await this.readConfig();
         //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
-
-        const {data}=await axios.post(`${serverUrl}?action=set_head`, {
+        const {data}=await postJson(`${serverUrl}?action=set_head`, {
             repo_id: repoId,
             branch,
             current, next,
         });
         if (data.status==="ok") {
             return ;
-            //console.log(`Pushed HEAD of '${branch}' from ${current} to ${next}`);
-            //return null;
         }
         throw new Error("Atomic change failed: Someone changed the head to "+data.status);
+    }
+    async addRemoteHead(branch: BranchName, next:Hash): Promise<void> {
+        const { repoId, serverUrl } = await this.readConfig();
+        //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
+        const {data}=await postJson(`${serverUrl}?action=set_head`, {
+            repo_id: repoId,
+            branch,
+            next,
+        });
+        if (data.status==="ok") {
+            return ;
+        }
+        throw new Error(branch+" already exists. status="+data.status);
     }
 }
 /*

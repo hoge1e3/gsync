@@ -1,8 +1,11 @@
 {
-    "name": "@acepad/git",
+    "name": "@acepad/gsync",
     "scripts": {
         "build": "npx tsc",
         "test": "npm run build && node js/test/test-git.js"
+    },
+    "bin": {
+        "gsync": "./bin.js"
     },
     "main": "git.js",
     "version": "1.0.0",
@@ -12,7 +15,6 @@
         "typescript": "^5.8.3"
     },
     "dependencies": {
-        "axios": "^1.10.0",
         "ignore": "^7.0.5"
     }
 }

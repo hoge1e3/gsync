@@ -1,6 +1,3 @@
-﻿node/js
-node/node_modules
-node/packs
-php/storage
-.gsync
+﻿.gsync
 .tsbuildinfo
+/cotest
