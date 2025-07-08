@@ -125,6 +125,9 @@ export class Repo {
     const workingDir = asPath( path.resolve(this.gitDir, '..') );
     const ig = new RecursiveGitIgnore();
     const base=path.basename(this.gitDir);
+    const baseig=ignore();
+    baseig.add(".git");
+    baseig.add(base);
     const walk = async (dir: Path): Promise<TreeEntry[]> => {
       ig.push(dir);
       try {
@@ -137,11 +140,7 @@ export class Repo {
 
           // 除外対象（.gitignore + .git フォルダ）をスキップ
           if (
-            ig.ignores(fullPath) ||
-            relPath === base ||
-            relPath.startsWith(base + path.sep) ||
-            relPath === '.git' ||
-            relPath.startsWith('.git' + path.sep)
+            ig.ignores(fullPath) || baseig.ignores(relPath)
           ) {
             //console.log("Ignored ",fullPath);
             continue;

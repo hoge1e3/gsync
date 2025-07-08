@@ -11,22 +11,22 @@ switch ($path) {
         break;
 
     case 'upload':
-        $input = parseJson(file_get_contents('php://input'), true);
+        $input = parseJson(file_get_contents('php://input'));
         echo json_encode(['timestamp' => uploadObjects($input)]);
         break;
 
     case 'download':
-        $input = parseJson(file_get_contents('php://input'), true);
+        $input = parseJson(file_get_contents('php://input'));
         echo json_encode(downloadObjects($input));
         break;
 
     case 'get_head':
-        $input = parseJson(file_get_contents('php://input'), true);
+        $input = parseJson(file_get_contents('php://input'));
         echo json_encode(['hash' => getHead($input)]);
         break;
 
     case 'set_head':
-        $input = parseJson(file_get_contents('php://input'), true);
+        $input = parseJson(file_get_contents('php://input'));
         $status = setHead($input);
         if (!$status) e505("Status is null :".json_encode(($input)));
         echo json_encode(['status' => $status]);

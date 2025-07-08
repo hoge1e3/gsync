@@ -133,7 +133,7 @@ function setHead(array $data): string {
     return "ok";
 }
 function parseJson($str) {
-    $r=json_decode($str);
+    $r=json_decode($str, true);
     if ($r===null) {
         throw new Exception("Cannot parse json: $str");
     }
