@@ -32,6 +32,7 @@ export async function main() {
             await commit(cwd);
             break;
         case "sync":
+        case undefined:
             await sync(cwd);
             break;
         case "log":
