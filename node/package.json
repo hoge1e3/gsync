@@ -1,5 +1,6 @@
 {
     "name": "@acepad/gsync",
+    "description": "git-like sync tool for AcePad",
     "scripts": {
         "build": "npx tsc",
         "test": "npm run build && node js/test/test-git.js"
@@ -7,8 +8,8 @@
     "bin": {
         "gsync": "./bin.js"
     },
-    "main": "git.js",
-    "version": "1.0.0",
+    "main": "js/src/cmd.js",
+    "version": "1.0.3",
     "type": "module",
     "devDependencies": {
         "@types/node": "^24.0.3",

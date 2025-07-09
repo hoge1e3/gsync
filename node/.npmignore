@@ -1,0 +1,5 @@
+.gsync
+.tsbuildinfo
+cotest
+js/test/fixture
+packs

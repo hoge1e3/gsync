@@ -3,18 +3,17 @@ import { Repo } from "./git.js";
 import { Config, GIT_DIR_NAME, Sync } from "./sync.js";
 import { asBranchName, asHash, asLocalRef, asPath, Author, BranchName, Hash, Path } from "./types.js";
 import fs from "fs";
-import { inherits } from "util";
 
-export async function main() {
+export async function main(cwd=process.cwd(), argv=process.argv) {
     // 1st command line arg is either clone commit sync
     // call corresponding function
-    const [,, command, ...args] = process.argv;
+    const [,, command, ...args] = argv;
     // pass current working directory as first argument
-    const cwd = process.cwd();
+    //const cwd = process.cwd();
     switch (command) {
         case "clone":
             if (args.length<2) {
-                console.log(process.argv.join(" ")+" <serverUrl> <repoId>");
+                console.log(argv.join(" ")+" <serverUrl> <repoId>");
                 return;
             }
             const b=args[2]||"main";
@@ -22,7 +21,7 @@ export async function main() {
             break;
         case "init":
             if (args.length<1) {
-                console.log(process.argv.join(" ")+" <serverUrl>");
+                console.log(argv.join(" ")+" <serverUrl>");
                 return;
             }
             const serverUrl=args[0];
