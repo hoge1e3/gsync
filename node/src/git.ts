@@ -38,7 +38,7 @@ export class Repo {
     return { type, content, hash };
   }
 
-  async writeObject(type: ObjectType, content: Buffer): Promise<Hash> {
+  async writeObject(type: ObjectType, content: Uint8Array): Promise<Hash> {
     const header = `${type} ${content.length}\0`;
     const store = new Uint8Array(Buffer.concat([Buffer.from(header), content]));
     const hash = asHash( await sha1Hex(store));// crypto.createHash('sha1').update(store).digest('hex') );
@@ -150,7 +150,8 @@ export class Repo {
           //const stat = await fs.promises.stat(fullPath);
 
           if (file.isFile()) {
-            const content = await fs.promises.readFile(fullPath);
+            const _content = await fs.promises.readFile(fullPath);
+            const content = stripCR(_content);
             const hash = await this.writeObject('blob', content);
             //console.log("File" , fullPath, hash);
 
@@ -523,3 +524,31 @@ export class RecursiveGitIgnore{
     this.stack.pop();
   }
 }
+
+function isUtf8Text(buffer:Buffer<ArrayBufferLike>):string|null {
+  try {
+    const text = new TextDecoder().decode(buffer);
+    // 制御文字（タブ、改行、キャリッジリターンは許可）
+    const controlChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+    if (controlChars.test(text)) {
+      return null;
+    }
+    // 文字化けの典型：置換文字（�）が多く含まれていたらNG
+    const replacementCharCount = (text.match(/\uFFFD/g) || []).length;
+    const replacementRate = replacementCharCount / text.length;
+    if (replacementRate > 0.01) {
+      return null;
+    }
+    return text;
+  } catch (e) {
+    // .toString('utf8')で例外が起きることはまれだが念のため
+    return null;
+  }
+}
+
+function stripCR(content: Buffer<ArrayBufferLike>): Uint8Array<ArrayBufferLike> {
+  const t=isUtf8Text(content);
+  if (!t) return content;
+  return new TextEncoder().encode(t.replace(/\r\n/g,"\n"));
+}
+
