@@ -1,4 +1,5 @@
 <?php
+require_once "log.php";
 function setErrStatus($s){
     global $errStatus;
     $errStatus=$s; 
@@ -23,6 +24,7 @@ function h_err($errno, $errstr, $errfile, $errline) {
 function e505($data) {
     header("Content-type: text/json; charset=utf8");
     http_response_code(500);
+    logMessage(["error" => $data]);
     echo json_encode($data);
     exit(1);
 }

@@ -1,7 +1,7 @@
 <?php
 
 define('REPO_DIR', __DIR__ . '/storage');
-
+require_once 'log.php';
 function createRepo(): string {
     do {
         $repo_id = bin2hex(random_bytes(8));
@@ -138,4 +138,25 @@ function parseJson($str) {
         throw new Exception("Cannot parse json: $str");
     }
     return $r;
+}
+$exclude_attributes=["objects"];
+//$logging_attributes=["repo_id", "branch", "current", "next", "since"];
+function respond_with_log($input, $response) {
+    logMessage([
+        "input" => create_log_entry($input),
+        "response" => create_log_entry($response)
+    ]);
+
+    echo json_encode($response);
+    exit;
+}
+function create_log_entry($input) {
+    global $exclude_attributes;
+    $log_entry = [];
+    foreach ($input as $attr => $value) {
+        if (!in_array($attr, $exclude_attributes) && isset($input[$attr])) {
+            $log_entry[$attr] = $input[$attr];
+        }
+    }
+    return $log_entry;
 }
