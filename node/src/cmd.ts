@@ -115,11 +115,11 @@ export async function commit(dir: string):Promise<Hash> {
     const curCommit = curCommitHash ? await repo.readCommit(curCommitHash) : null;
     const newCommitTreeHash=await repo.writeTree(tree);
     console.log("newCommitTreeHash", newCommitTreeHash);
-    if (curCommit && curCommit.tree===newCommitTreeHash) {
+    const MERGE_HEAD=await repo.readMergeHead();
+    if (!MERGE_HEAD && curCommit && curCommit.tree===newCommitTreeHash) {
         console.log(branch,": Nothing changed");
         return curCommitHash!;
     }
-    const MERGE_HEAD=await repo.readMergeHead();
     const newCommitHash=await repo.writeCommit({
         author: new Author("test","test@example.com"),
         committer: new Author("test","test@example.com"),
