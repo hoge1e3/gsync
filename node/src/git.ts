@@ -5,17 +5,20 @@ import path from 'path';
 import crypto from 'crypto';*/
 import ignore from 'ignore';
 //import { promisify } from 'util';
-import { asFilename, asHash, asMode, asPath, asRelPath, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, Path, RelPath, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef } from './types.js';
+import { asFilename, asHash, asMode, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef, PathInRepo, FilePath, asFilePath, asPathInRepo } from './types.js';
 import { inflate, deflate ,sha1Hex } from './codec.js';
 /*const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);*/
 export class Repo {
-  constructor(public gitDir: Path) { }
-
-  private getObjectPath(hash: Hash): Path {
+  constructor(public gitDir: FilePath) { }
+  toFilePath(pathInRepo: PathInRepo) {
+    const r=path.join(this.workingDir(), pathInRepo );
+    return asFilePath(r);
+  }
+  private getObjectPath(hash: Hash): FilePath {
     const dir = path.join(this.gitDir, 'objects', hash.slice(0, 2));
     const file = path.join(dir, hash.slice(2));
-    return file as Path;
+    return file as FilePath;
   }
 
   async readObject(hash: Hash): Promise<GitObject> {
@@ -122,20 +125,20 @@ export class Repo {
   }
 
   async buildTreeFromWorkingDir(): Promise<TreeEntry[]> {
-    const workingDir = asPath( path.resolve(this.gitDir, '..') );
+    const workingDir = this.workingDir();
     const ig = new RecursiveGitIgnore();
     const base=path.basename(this.gitDir);
     const baseig=ignore();
     baseig.add(".git");
     baseig.add(base);
-    const walk = async (dir: Path): Promise<TreeEntry[]> => {
+    const walk = async (dir: FilePath): Promise<TreeEntry[]> => {
       ig.push(dir);
       try {
         const entries: TreeEntry[] = [];
         const files = await fs.promises.readdir(dir, { withFileTypes: true });
         for (const file of files) {
           const name = asFilename(file.name);
-          const fullPath = asPath(path.join(dir, name));
+          const fullPath = asFilePath(path.join(dir, name));
           const relPath = path.relative(workingDir, fullPath);
 
           // 除外対象（.gitignore + .git フォルダ）をスキップ
@@ -170,6 +173,10 @@ export class Repo {
     };
 
     return await walk(workingDir);
+  }
+
+  workingDir() {
+    return asFilePath(path.resolve(this.gitDir, '..'));
   }
 
   async readCommit(hash: Hash): Promise<CommitEntry> {
@@ -248,10 +255,10 @@ export class Repo {
   }
   async *traverseTree(
     entries: TreeEntry[],
-    prefix = ''
-  ): AsyncGenerator<{ path: RelPath; hash: Hash; content?: Buffer }> {
+    prefix = '' as PathInRepo
+  ): AsyncGenerator<{ path: PathInRepo; hash: Hash; content?: Buffer }> {
     for (const entry of entries) {
-      const relPath = asRelPath(path.posix.join(prefix, entry.name));
+      const relPath = asPathInRepo(path.posix.join(prefix, entry.name));
       const { type, content } = await this.readObject(entry.hash);
 
       if (type === 'blob') {
@@ -312,7 +319,7 @@ export class Repo {
   async diffTreeRecursive(
     oldTree: TreeEntry[],
     newTree: TreeEntry[],
-    prefix = ''
+    prefix = '' as PathInRepo
   ): Promise<TreeDiffEntry[]> {
     const diffs: TreeDiffEntry[] = [];
 
@@ -324,7 +331,7 @@ export class Repo {
     for (const name of names) {
       const oldEnt = oldMap.get(name);
       const newEnt = newMap.get(name);
-      const relPath = asRelPath(path.posix.join(prefix, name));
+      const relPath = asPathInRepo(path.posix.join(prefix, name));
 
       if (oldEnt && !newEnt) {
         // 削除
@@ -415,11 +422,11 @@ export class Repo {
       toA, toB, conflicts
     };
   }
-  async checkoutTreeToDir(treeHash: Hash, dirPath: Path): Promise<void> {
+  async checkoutTreeToDir(treeHash: Hash, dirPath: FilePath): Promise<void> {
     const entries = await this.readTree(treeHash);
 
     for (const entry of entries) {
-      const outPath = asPath(path.join(dirPath, entry.name));
+      const outPath = asFilePath(path.join(dirPath, entry.name));
 
       if (entry.mode === '40000') {
         // ディレクトリ（tree）→ 再帰的に処理
@@ -495,10 +502,10 @@ export class Repo {
 
 export class RecursiveGitIgnore{
   stack=[] as {
-    dir:Path,
+    dir:FilePath,
     ig:ignore.Ignore;
   }[];
-  ignores(file:Path):boolean{
+  ignores(file:FilePath):boolean{
     for (const {ig, dir} of this.stack) {
       if (file.startsWith(dir)) {
         const rel=path.relative(dir, file);
@@ -508,7 +515,7 @@ export class RecursiveGitIgnore{
     }
     return false; // デフォルトは無視しない
   }
-  push(dir:Path){
+  push(dir:FilePath){
     const ig=ignore();
     // .gitignore を読み込む（存在する場合）
     const gitignorePath = path.join(dir, '.gitignore');
@@ -525,28 +532,30 @@ export class RecursiveGitIgnore{
   }
 }
 
-function isUtf8Text(buffer:Buffer<ArrayBufferLike>):string|null {
-  try {
-    const text = new TextDecoder().decode(buffer);
-    // 制御文字（タブ、改行、キャリッジリターンは許可）
-    const controlChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
-    if (controlChars.test(text)) {
-      return null;
-    }
-    // 文字化けの典型：置換文字（�）が多く含まれていたらNG
-    const replacementCharCount = (text.match(/\uFFFD/g) || []).length;
-    const replacementRate = replacementCharCount / text.length;
-    if (replacementRate > 0.01) {
-      return null;
-    }
-    return text;
-  } catch (e) {
-    // .toString('utf8')で例外が起きることはまれだが念のため
-    return null;
-  }
-}
 
-function stripCR(content: Buffer<ArrayBufferLike>): Uint8Array<ArrayBufferLike> {
+export function stripCR(content: Buffer<ArrayBufferLike>): Uint8Array<ArrayBufferLike> {
+  function isUtf8Text(buffer:Buffer<ArrayBufferLike>):string|null {
+    try {
+      const text = new TextDecoder().decode(buffer);
+      // そもそも\r\nがないのだったら置換されないのでnull(そのまま返す)
+      if (!text.includes("\r\n")) return null;
+      // 制御文字（タブ、改行、キャリッジリターンは許可）
+      const controlChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+      if (controlChars.test(text)) {
+        return null;
+      }
+      // 文字化けの典型：置換文字（黒いひし形の中に?）が多く含まれていたらNG
+      const replacementCharCount = (text.match(/\uFFFD/g) || []).length;
+      const replacementRate = replacementCharCount / text.length;
+      if (replacementRate > 0.01) {
+        return null;
+      }
+      return text;
+    } catch (e) {
+      // .toString('utf8')で例外が起きることはまれだが念のため
+      return null;
+    }
+  }
   const t=isUtf8Text(content);
   if (!t) return content;
   return new TextEncoder().encode(t.replace(/\r\n/g,"\n"));

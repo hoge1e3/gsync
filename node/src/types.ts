@@ -18,26 +18,31 @@ export function asMode(s: string) {
   return s;
 }
 
-const SymRelPath=Symbol("path");
-export type RelPath=string&{[SymRelPath]:undefined};
-export function isRelPath(s:string): s is RelPath{
+const SymPathInRepo=Symbol("pathInRepo");
+export type PathInRepo=string&{[SymPathInRepo]:undefined};
+export function isPathInRepo(s:string): s is PathInRepo{
   return true;
 }
-const SymAbsPath=Symbol("path");
-export type AbsPath=string&{[SymAbsPath]:undefined};
-export function isAbsPath(s:string): s is AbsPath{
+const SymFilePath=Symbol("filePath");
+export type FilePath=string&{[SymFilePath]:undefined};
+export function isFilePath(s:string): s is FilePath{
   return true;
 }
-export type Path=RelPath|AbsPath;
-export function isPath(s:string): s is Path {
+//export type Path=RelPath|AbsPath;
+/*export function isPath(s:string): s is Path {
   return isAbsPath(s) || isRelPath(s);
 }
 export function asPath(s:string) {
   if (!isPath(s)) throw new Error(`${s} is not a path`);
   return s;
+}*/
+export function asFilePath(s:string) {
+  if (!isFilePath(s)) throw new Error(`${s} is not a file path`);
+  return s;
 }
-export function asRelPath(s:string) {
-  if (!isRelPath(s)) throw new Error(`${s} is not a relative path`);
+
+export function asPathInRepo(s:string) {
+  if (!isPathInRepo(s)) throw new Error(`${s} is not a relative path in repository`);
   return s;
 }
 const SymFilename=Symbol("filename");
@@ -72,13 +77,13 @@ export function asLocalRef(s:BranchName):Ref {
 }
 export type Ref=string&{[SymRef]:undefined};
 
-export type Conflict = { path: Path; base?: Hash; a: Hash; b: Hash };
+export type Conflict = { path: PathInRepo; base?: Hash; a: Hash; b: Hash };
 export type ObjectType = "commit" | "tree" | "blob" | "tag";
 export function isObjectType(type: string): type is ObjectType {
   return ['commit', 'tree', 'blob', 'tag'].includes(type);
 }
 export type TreeDiffEntry = {
-  path: Path;
+  path: PathInRepo;
 } & ({ 
     type: "added", newHash: Hash,
 }|{ 

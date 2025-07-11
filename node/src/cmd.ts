@@ -1,7 +1,7 @@
 import path from "path";
-import { Repo } from "./git.js";
+import { Repo, stripCR } from "./git.js";
 import { Config, GIT_DIR_NAME, Sync } from "./sync.js";
-import { asBranchName, asHash, asLocalRef, asPath, Author, BranchName, Hash, Path } from "./types.js";
+import { asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash } from "./types.js";
 import fs from "fs";
 
 export async function main(cwd=process.cwd(), argv=process.argv) {
@@ -45,7 +45,7 @@ export async function main(cwd=process.cwd(), argv=process.argv) {
     }
 }
 export async function catFile(dir: string, hash: string ) {
-    const repo=new Repo(findGitDir(asPath(dir)));
+    const repo=new Repo(findGitDir(asFilePath(dir)));
     const obj=await repo.readObject(asHash(hash));
     if (!obj) {
         console.log("No such object: ", hash);
@@ -60,7 +60,7 @@ export async function init(serverUrl: string, gitDirName=GIT_DIR_NAME) {
     if (!serverUrl.endsWith(".php") && !serverUrl.endsWith("/")){
         console.warn(`${serverUrl} should be ends with .php or / `);
     }
-    const gitDir=asPath(gitDirName);
+    const gitDir=asFilePath(gitDirName);
     const sync=new Sync(gitDir);
     const repoId=await sync.init(serverUrl);
     console.log("Initialized new repository with id: ", repoId);
@@ -69,16 +69,16 @@ export async function init(serverUrl: string, gitDirName=GIT_DIR_NAME) {
     return repoId;
 }
 export async function clone(into:string,    serverUrl: string, repoId: string, branch="main") {
-    await _clone(asPath(into), {serverUrl,repoId} , asBranchName(branch) );
+    await _clone(asFilePath(into), {serverUrl,repoId} , asBranchName(branch) );
 }
 
-async function _clone(into:Path, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME) {
+async function _clone(into:FilePath, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME) {
     if (fs.existsSync(into) && fs.readdirSync(into).length>0) {
         throw new Error(`${into} is not empty.`);
     }
     console.log(`Cloning into ${into}...`);
     if (!fs.existsSync(into)) fs.mkdirSync(into);
-    const newGitDir=asPath(path.join(into,gitDirName));
+    const newGitDir=asFilePath(path.join(into,gitDirName));
     fs.mkdirSync(newGitDir);
     const newSync=new Sync(newGitDir);
     const repo=new Repo(newGitDir);
@@ -92,18 +92,18 @@ async function _clone(into:Path, config:Config,  branch: BranchName, gitDirName=
     return newSync;
 
 }
-export function findGitDir(cwd: Path):Path {
+export function findGitDir(cwd: FilePath):FilePath {
     let c=cwd as string;
     while(true) {
         const res=path.join(c,GIT_DIR_NAME);
-        if (fs.existsSync(res)) return asPath(res);
+        if (fs.existsSync(res)) return asFilePath(res);
         const nc=path.dirname(c);
         if (!nc || nc===c) throw new Error(`No git repo found from ${cwd}`);
         c=nc;
     }
 }
 export async function commit(dir: string):Promise<Hash> {
-    const repo=new Repo(findGitDir(asPath(dir)));
+    const repo=new Repo(findGitDir(asFilePath(dir)));
     if (!fs.existsSync(repo.headPath())) {
         await repo.setCurrentBranchName(asBranchName("main"));
     }
@@ -135,7 +135,7 @@ export async function commit(dir: string):Promise<Hash> {
 export async function sync(dir: string) {
 
     const localCommitHash=await commit(dir);
-    const gitDir = findGitDir(asPath(dir));
+    const gitDir = findGitDir(asFilePath(dir));
     const sync=new Sync(gitDir);
     const repo=new Repo(gitDir);
     const branch=await repo.getCurrentBranchName();
@@ -187,14 +187,25 @@ export async function sync(dir: string) {
         for (let c of conflicts) {
             const obj=await repo.readObject(c.b);
             const postfix=`(${remoteCommitHash.substring(0,8)})`;
-            const newPath = makePostfix(c.path, postfix);
-            console.log(`Conflict saved at ${newPath}`);
-            fs.writeFileSync(asPath(newPath), obj.content);
+            const oldPath = repo.toFilePath(c.path);
+            const oldContent = fs.readFileSync(oldPath);
+            const newPath = makePostfix(oldPath, postfix);
+            if (isConflicting(oldContent, obj.content)) {
+                console.log(`Conflict saved at ${newPath}`);
+                fs.writeFileSync(newPath, obj.content);
+            }
         }
         console.log("Resolve conflicts and run sync again");
     }
 }
-function makePostfix(filepath:string, postfix:string) {
+function isConflicting(a:Buffer, b:Buffer) {
+    const sa=stripCR(a);
+    const sb=stripCR(b);
+    if (sa.byteLength!==sb.byteLength) return true;
+    for (let i=0;i<sa.byteLength;i++) if (sa[i]!==sb[i]) return true;
+    return false; 
+}
+function makePostfix<T extends string>(filepath:T, postfix:string):T {
     // ex: filepath = "/a/b/test.txt"  postfix = "(1)"
     //       returns "/a/b/test(1).txt"
     //     filepath may either absolute or relative path
@@ -202,11 +213,11 @@ function makePostfix(filepath:string, postfix:string) {
     const basename = path.basename(filepath, ext);
     const dirname = path.dirname(filepath);
     const newBasename = `${basename}${postfix}${ext}`;
-    return path.join(dirname, newBasename);
+    return path.join(dirname, newBasename) as T;
 }
 export async function log(dir: string) {
     
-    const gitDir = findGitDir(asPath(dir));
+    const gitDir = findGitDir(asFilePath(dir));
     const repo=new Repo(gitDir);
     const b=await repo.getCurrentBranchName();
     let ch=await repo.readHead(asLocalRef(b));
@@ -217,3 +228,4 @@ export async function log(dir: string) {
         if (c.parents[1]) console.log("Skipped merge commit: ",c.parents[1]);
     }
 }
+

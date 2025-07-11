@@ -1,6 +1,6 @@
 import fs, { mkdir } from 'fs';
 import path from 'path';
-import { asHash, asPath, BranchName, Hash, Path } from './types.js';
+import { asHash, BranchName, Hash,FilePath, asFilePath } from './types.js';
 
 
 export type Config = {
@@ -20,7 +20,7 @@ export async function postJson(url:string, data={}){
     return {data: (await response.json()) as any};
 }
 export class Sync {
-    constructor(public gitDir: Path) { }
+    constructor(public gitDir: FilePath) { }
     async init(serverUrl: string):Promise<string> {
         if (fs.existsSync(this.gitDir)) {
             throw new Error("Cannot init: "+this.gitDir+" already exists.");
@@ -52,7 +52,7 @@ export class Sync {
         await fs.promises.writeFile(conffile, JSON.stringify(conf));
     }
     private confFile() {
-        return asPath(path.join(this.gitDir, "remote-conf.json"));
+        return asFilePath(path.join(this.gitDir, "remote-conf.json"));
     }
 
     async readState(): Promise<State> {
@@ -67,7 +67,7 @@ export class Sync {
         return state;
     }
     private stateFile() {
-        return asPath(path.join(this.gitDir, "remote-state.json"));
+        return asFilePath(path.join(this.gitDir, "remote-state.json"));
     }
     async writeState(state: State) {
         const statefile = this.stateFile();

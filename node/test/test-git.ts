@@ -1,4 +1,4 @@
-import { asPath, Author, Hash, RelPath, TreeEntry, asLocalRef, asBranchName, asHash, ObjectType, Path} from "../src/types.js";
+import { Author, Hash, TreeEntry, asLocalRef, asBranchName, asHash, ObjectType, FilePath, asFilePath} from "../src/types.js";
 import * as assert from "assert";
 import { RecursiveGitIgnore, Repo } from "../src/git.js";
 import { Sync } from "../src/sync.js";
@@ -10,14 +10,14 @@ const localRef_main = asLocalRef(branch_main);
 import path from "path";
 import fs from "fs";
 export async function testHash2(){
-    const repo=new Repo(asPath("../.gsync"));
+    const repo=new Repo(asFilePath("../.gsync"));
     const ig=new RecursiveGitIgnore();
-    const walk=(dir:Path)=>{
+    const walk=(dir:FilePath)=>{
         ig.push(dir);
         //console.log("ig",ig);
         const files = fs.readdirSync(dir, { withFileTypes: true });
         for (const file of files) {
-            const fullPath = asPath(path.join(dir, file.name));
+            const fullPath = asFilePath(path.join(dir, file.name));
             if (ig.ignores(fullPath)||file.name===(".git")) {
                 console.log("Ignores" ,fullPath);
                 continue;
@@ -34,7 +34,7 @@ export async function testHash2(){
         }
         ig.pop();
     };
-    walk(asPath(path.dirname(repo.gitDir)));
+    walk(asFilePath(path.dirname(repo.gitDir)));
     return;
 
     const obj1=await repo.readObject(asHash("4b4a31ee8f73a2aad9045b32e996a5762e575982"));
@@ -70,7 +70,7 @@ async function writeObject(type: ObjectType, content: Buffer): Promise<Hash> {
     return hash;
 }
 export async function testHash(){
-    const repo=new Repo(asPath(".git"));
+    const repo=new Repo(asFilePath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
     //console.log(obj.type, obj.content);
     const curCommitHash=await repo.readHead(localRef_main);
@@ -82,9 +82,9 @@ export async function testHash(){
     console.log(curTree);
     console.log("---last commit ---");
     for await (let e of repo.traverseTree(curTree)) {
-        console.log(e.path, e.hash, await newLineType(e.path, e.hash));        
+        console.log(e.path, e.hash, await newLineType(repo.toFilePath(e.path), e.hash));        
     }
-    async function newLineType(path:RelPath, hash:Hash) {
+    async function newLineType(path:FilePath, hash:Hash) {
         if (path.match(/\.(js|ts|json)$/)) {
             const text=await repo.readBlobAsText(hash);
             if (text.includes("\r\n")) return ("CR+LF");
@@ -132,7 +132,7 @@ async function testSync_fetch() {
 
 }*/
 async function test_clone(name="clonetes") {
-    const repo=new Sync(asPath("js/test/fixture/dotgit"));
+    const repo=new Sync(asFilePath("js/test/fixture/dotgit"));
     /*await Sync.clone(asPath("js/test/fixture/clonetes"), await repo.readConfig() , branch_main );
     */
    const conf=await repo.readConfig();
