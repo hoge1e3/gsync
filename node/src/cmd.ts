@@ -183,7 +183,7 @@ export async function sync(dir: string) {
         console.log("Merged commit hash: ",mergedCommitHash);
         console.log("Run sync again to push merged commit");       
     } else {
-        console.log("CONFLICT");
+        let confc=0;
         for (let c of conflicts) {
             const obj=await repo.readObject(c.b);
             const postfix=`(${remoteCommitHash.substring(0,8)})`;
@@ -191,11 +191,19 @@ export async function sync(dir: string) {
             const oldContent = fs.readFileSync(oldPath);
             const newPath = makePostfix(oldPath, postfix);
             if (isConflicting(oldContent, obj.content)) {
+                confc++;
+                if (confc==1) console.log("CONFLICT");
                 console.log(`Conflict saved at ${newPath}`);
                 fs.writeFileSync(newPath, obj.content);
             }
         }
-        console.log("Resolve conflicts and run sync again");
+        if (confc>0) console.log("Resolve conflicts and run sync again");
+        else {
+            console.log("Auto-Merged from ",remoteCommit);
+            const mergedCommitHash=await commit(dir);
+            console.log("Merged commit hash: ",mergedCommitHash);
+            console.log("Run sync again to push merged commit");       
+        }
     }
 }
 function isConflicting(a:Buffer, b:Buffer) {
