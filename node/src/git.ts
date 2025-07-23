@@ -16,7 +16,7 @@ export class Repo {
     return asFilePath(r);
   }
   private getObjectPath(hash: Hash): FilePath {
-    const dir = path.join(this.gitDir, 'objects', hash.slice(0, 2));
+    const dir = path.join(this.gitDir, 'objects', hash.slice(0, 2));/*replace by ObjectStore*/
     const file = path.join(dir, hash.slice(2));
     return file as FilePath;
   }

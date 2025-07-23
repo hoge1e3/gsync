@@ -77,7 +77,7 @@ export class Sync {
     async uploadObjects(): Promise<void> {
         const config = await this.readConfig();
         const state = await this.readState();
-        const objectsDir = path.join(this.gitDir, 'objects');
+        const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
         const objects: { hash: string; content: string }[] = [];
 
         const dirs = fs.readdirSync(objectsDir).filter(d => /^[0-9a-f]{2}$/.test(d));
@@ -117,7 +117,7 @@ export class Sync {
     async downloadObjects(): Promise<void> {
         const config = await this.readConfig();
         const state = await this.readState();
-        const objectsDir = path.join(this.gitDir, 'objects');
+        const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
 
         const res = await postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
@@ -126,7 +126,6 @@ export class Sync {
 
         const objects: { hash: Hash; content: string }[] = res.data.objects;
         const newDownloadSince = res.data.newest - 0;
-        //console.log("objects",objects.map(o=>o.hash));
         let donloaded=0, skipped=0;
         for (const { hash, content } of objects) {
             asHash(hash);
