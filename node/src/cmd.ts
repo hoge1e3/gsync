@@ -25,7 +25,7 @@ export async function main(cwd=process.cwd(), argv=process.argv) {
                 return;
             }
             const serverUrl=args[0];
-            await init(serverUrl);
+            await init(cwd, serverUrl, GIT_DIR_NAME);
             break;
         case "commit":
             await commit(cwd);
@@ -56,11 +56,12 @@ export async function catFile(dir: string, hash: string ) {
     console.log(obj.content.toString());
     
 }
-export async function init(serverUrl: string, gitDirName=GIT_DIR_NAME) {
+export async function init(cwd: string, serverUrl: string, gitDirName=GIT_DIR_NAME) {
+    const dir=path.join(cwd, gitDirName);
     if (!serverUrl.endsWith(".php") && !serverUrl.endsWith("/")){
         console.warn(`${serverUrl} should be ends with .php or / `);
     }
-    const gitDir=asFilePath(gitDirName);
+    const gitDir=asFilePath(dir);
     const sync=new Sync(gitDir);
     const repoId=await sync.init(serverUrl);
     console.log("Initialized new repository with id: ", repoId);
