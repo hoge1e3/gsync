@@ -2,7 +2,7 @@
     "compilerOptions": {
       "sourceMap": true,
       "target": "esnext",
-      "lib": ["ESNext"],
+      "lib": ["dom","ESNext"],
       "module": "esnext",
       //"allowImportingTsExtensions": true,
       //"noEmit": true,
