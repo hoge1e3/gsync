@@ -1,6 +1,6 @@
 // @acepad/git
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 /*import zlib from 'zlib';
 import crypto from 'crypto';*/
 import ignore from 'ignore';

@@ -1,6 +1,7 @@
 import { asFilePath, asHash, FilePath, Hash } from "./types.js";
 import * as path from "path";
 import * as fs from "fs";
+import MutablePromise from "mutable-promise";
 export type ObjectEntry = {
     hash: Hash;
     content: Uint8Array;
@@ -14,6 +15,7 @@ export interface ObjectStore {
 }
 export class IndexedDBBasedObjectStore implements ObjectStore {
     private db: IDBDatabase | null = null;
+    dbInit=new MutablePromise<IDBDatabase>();
     constructor(public dbName: string, public storeName: string) {
         // Initialize IndexedDB
         const request = indexedDB.open(dbName);
@@ -25,12 +27,16 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
         };
         request.onsuccess = (event: Event) => {
             this.db = (event.target as IDBOpenDBRequest).result;
+            this.dbInit.resolve(this.db);
         };
         request.onerror = (event: Event) => {
-            console.error("IndexedDB error:", (event.target as IDBOpenDBRequest).error);
+            const error = (event.target as IDBOpenDBRequest).error;
+            console.error("IndexedDB error:", error);
+            this.dbInit.reject(error);
         }
     }
-    has(hash: Hash): Promise<boolean> {
+    async has(hash: Hash): Promise<boolean> {
+        await this.dbInit;
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction(this.storeName);
             const store = transaction.objectStore(this.storeName);
@@ -39,7 +45,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
             request.onerror = () => reject(request.error);
         });
     }
-    get(hash: Hash): Promise<Uint8Array> {
+    async get(hash: Hash): Promise<Uint8Array> {
+        await this.dbInit;
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction(this.storeName);
             const store = transaction.objectStore(this.storeName);
@@ -54,7 +61,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
             request.onerror = () => reject(request.error);
         });
     }
-    put(hash: Hash, compressed: Uint8Array): Promise<void> {
+    async put(hash: Hash, compressed: Uint8Array): Promise<void> {
+        await this.dbInit;
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction(this.storeName, "readwrite");
             const store = transaction.objectStore(this.storeName);
@@ -64,6 +72,7 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
         });     
     }
     async *iterate(since: Date): AsyncGenerator<ObjectEntry> {
+        await this.dbInit;
         const transaction = this.db!.transaction(this.storeName, "readonly");
         const store = transaction.objectStore(this.storeName);
         const request = store.openCursor();
