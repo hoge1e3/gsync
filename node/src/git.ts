@@ -7,23 +7,24 @@ import ignore from 'ignore';
 //import { promisify } from 'util';
 import { asFilename, asHash, asMode, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef, PathInRepo, FilePath, asFilePath, asPathInRepo } from './types.js';
 import { inflate, deflate ,sha1Hex } from './codec.js';
+import { FileBasedObjectStore, ObjectStore } from './objects.js';
 /*const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);*/
 export class Repo {
-  constructor(public gitDir: FilePath) { }
+  objectStore:ObjectStore;
+  constructor(public gitDir: FilePath) {
+     const objdir = asFilePath(path.join(this.gitDir, 'objects'));
+     this.objectStore=new FileBasedObjectStore(objdir);
+  }
   toFilePath(pathInRepo: PathInRepo) {
     const r=path.join(this.workingDir(), pathInRepo );
     return asFilePath(r);
   }
-  private getObjectPath(hash: Hash): FilePath {
-    const dir = path.join(this.gitDir, 'objects', hash.slice(0, 2));/*replace by ObjectStore*/
-    const file = path.join(dir, hash.slice(2));
-    return file as FilePath;
-  }
-
   async readObject(hash: Hash): Promise<GitObject> {
-    const filePath = this.getObjectPath(hash);
-    const compressed = await fs.promises.readFile(filePath);
+    /*const filePath = this.getObjectPath(hash);
+    const compressed = await fs.promises.readFile(filePath);*/
+    const compressed = await this.objectStore.get(hash);
+
     const data = Buffer.from(await inflate(new Uint8Array(compressed)));
 
     const nullIndex = data.indexOf(0);
@@ -46,7 +47,10 @@ export class Repo {
     const store = new Uint8Array(Buffer.concat([Buffer.from(header), content]));
     const hash = asHash( await sha1Hex(store));// crypto.createHash('sha1').update(store).digest('hex') );
 
-    const filePath = this.getObjectPath(hash);
+    const compressed = await deflate(store);
+    this.objectStore.put(hash, compressed);
+
+    /*const filePath = this.getObjectPath(hash);
     if (fs.existsSync(filePath)) {
       return hash; // 既に存在する場合はそのまま返す
     }
@@ -55,7 +59,7 @@ export class Repo {
 
     const compressed = await deflate(store);
     await fs.promises.writeFile(filePath, compressed);
-
+    */
     return hash;
   }
 

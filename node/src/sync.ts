@@ -1,6 +1,7 @@
 import fs, { mkdir } from 'fs';
 import path from 'path';
 import { asHash, BranchName, Hash,FilePath, asFilePath } from './types.js';
+import { FileBasedObjectStore, ObjectStore } from './objects.js';
 
 
 export type Config = {
@@ -20,7 +21,11 @@ export async function postJson(url:string, data={}){
     return {data: (await response.json()) as any};
 }
 export class Sync {
-    constructor(public gitDir: FilePath) { }
+    objectStore: ObjectStore;
+    constructor(public gitDir: FilePath) { 
+        const objdir = asFilePath(path.join(this.gitDir, 'objects'));
+        this.objectStore=new FileBasedObjectStore(objdir);        
+    }
     async init(serverUrl: string):Promise<string> {
         if (fs.existsSync(this.gitDir)) {
             throw new Error("Cannot init: "+this.gitDir+" already exists.");
@@ -77,27 +82,17 @@ export class Sync {
     async uploadObjects(): Promise<void> {
         const config = await this.readConfig();
         const state = await this.readState();
-        const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
+        //const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
         const objects: { hash: string; content: string }[] = [];
 
-        const dirs = fs.readdirSync(objectsDir).filter(d => /^[0-9a-f]{2}$/.test(d));
+        //const dirs = fs.readdirSync(objectsDir).filter(d => /^[0-9a-f]{2}$/.test(d));
         const newUploadSince = Math.floor(Date.now() / 1000);
-        for (const dir of dirs) {
-            const dirPath = path.join(objectsDir, dir);
-            const files = fs.readdirSync(dirPath).filter(f => /^[0-9a-f]{38}$/.test(f));
 
-            for (const file of files) {
-                const filePath = path.join(dirPath, file);
-                const stats = fs.statSync(filePath);
-
-                if (stats.mtimeMs < state.uploadSince * 1000) continue; // 秒→ミリ秒で比較
-
-                const hash = dir + file;
-                const raw = fs.readFileSync(filePath);
-                const content = raw.toString('base64');
-
-                objects.push({ hash, content });
-            }
+        for await (const entry of this.objectStore.iterate(new Date(state.uploadSince * 1000))) {
+            objects.push({
+                hash: entry.hash,
+                content: toBase64(entry.content)
+            });
         }
         if (objects.length === 0) {
             console.log('No new objects to upload.');
@@ -117,7 +112,7 @@ export class Sync {
     async downloadObjects(): Promise<void> {
         const config = await this.readConfig();
         const state = await this.readState();
-        const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
+        //const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
 
         const res = await postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
@@ -201,6 +196,19 @@ export class Sync {
             return ;
         }
         throw new Error(branch+" already exists. status="+data.status);
+    }
+}
+
+function toBase64(content: Uint8Array<ArrayBufferLike>): string {
+    if (typeof btoa !== "undefined") {
+        let binary = "";
+        for (let i = 0; i < content.length; i++) {
+            binary += String.fromCharCode(content[i]);
+        }
+        return btoa(binary);
+    } else {
+        // Node.js environment without Buffer (fallback)
+        throw new Error("Base64 encoding not supported in this environment without Buffer.");
     }
 }
 /*
