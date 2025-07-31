@@ -2,14 +2,16 @@ import { asFilePath, asHash, FilePath, Hash } from "./types.js";
 import * as path from "path";
 import * as fs from "fs";
 import MutablePromise from "mutable-promise";
-export type ObjectEntry = {
-    hash: Hash;
+export type ObjectValue = {
     content: Uint8Array;
     mtime: Date;
-};
+}
+export type ObjectEntry = {
+    hash: Hash;
+}&ObjectValue;
 export interface ObjectStore {
     has(hash: Hash): Promise<boolean>;
-    get(hash: Hash): Promise<Uint8Array>;
+    get(hash: Hash): Promise<ObjectValue>;
     put(hash: Hash, compressed: Uint8Array): Promise<void>;
     iterate(since: Date): AsyncGenerator<ObjectEntry>;
 }
@@ -45,7 +47,7 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
             request.onerror = () => reject(request.error);
         });
     }
-    async get(hash: Hash): Promise<Uint8Array> {
+    async get(hash: Hash): Promise<ObjectValue> {
         await this.dbInit;
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction(this.storeName);
@@ -53,7 +55,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
             const request = store.get(hash);
             request.onsuccess = () => {
                 if (request.result) {
-                    resolve(new Uint8Array(request.result));
+                    const value:ObjectValue=request.result;
+                    resolve(value);
                 } else {
                     reject(new Error(`Object ${hash} not found`));
                 }
@@ -65,8 +68,9 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
         await this.dbInit;
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction(this.storeName, "readwrite");
+            const value:ObjectValue = { content: compressed, mtime: new Date() };
             const store = transaction.objectStore(this.storeName);
-            const request = store.put(compressed, hash);
+            const request = store.put(value, hash);
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });     
@@ -87,8 +91,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
         request.onsuccess = () => {
             const cursor = request.result;
             if (cursor) {
-                const { key, value } = cursor;
-                if (value.mtime >= since) {
+                const { key, value }:{key:IDBValidKey, value:ObjectValue} = cursor ;
+                if (value.mtime.getTime() >= since.getTime()) {
                     resolve({ hash: asHash(key.toString()), content: value.content, mtime: value.mtime });
                 }
                 cursor.continue();
@@ -122,13 +126,13 @@ export class FileBasedObjectStore implements ObjectStore {
         // returns true if object file exists
         return fs.existsSync(this.pathOf(hash));
     }
-    async get(hash: Hash): Promise<Uint8Array> {
+    async get(hash: Hash): Promise<ObjectValue> {
         // returns raw(compressed) Uint8Array of object file(no need to decompress/decode content)
         const filePath = this.pathOf(hash);
         if (!fs.existsSync(filePath)) {
             throw new Error(`Object ${hash} not found at ${filePath}`);
         }
-        return fs.readFileSync(filePath);
+        return {content:fs.readFileSync(filePath), mtime: fs.statSync(filePath).mtime};
     }
     async put(hash: Hash, compressed: Uint8Array) {
         // saves raw(compressed) Uint8Array to object file

@@ -146,6 +146,7 @@ async function test_sync(name="clonetes") {
     await sync("js/test/fixture/"+name);
 }
 async function testObjectStore(){
+    const since1=new Date();
     const s=new FileBasedObjectStore(asFilePath("../cotest/.gsync/objects"));
     const all:ObjectEntry[]=[];
     for await (let e of s.iterate(new Date(0))) {
@@ -158,11 +159,12 @@ async function testObjectStore(){
     const d=all[10].mtime;
     console.log("----",d);
     for await (let e of s.iterate(d)) {
-        console.log(e.hash, e.content.byteLength, e.mtime);
+        console.log("iter1", e.hash, e.content.byteLength, e.mtime);
     }
     const s2=new FileBasedObjectStore(asFilePath("../cotest/.gsync/objects2"));
     s2.put(all[0].hash, all[0].content);
-    const c=await s2.get(all[0].hash);
+    const val=await s2.get(all[0].hash);
+    const c=val.content;
     if (c.byteLength!==all[0].content.byteLength){
         throw new Error("Not match");
     }
@@ -173,7 +175,13 @@ async function testObjectStore(){
     }
     console.log(await s2.has(all[0].hash));
     console.log(await s2.has(asHash("0cd7fb5fabbf420a4256e6b86b6825d6da2f602c")));
-
+    const since2=new Date();
+    for await (let e of s2.iterate(since1)) {
+        console.log("iter2-1", since1, e.hash, e.content.byteLength, e.mtime);
+    }
+    for await (let e of s2.iterate(since2)) {
+        console.log("iter2-2", since2, e.hash, e.content.byteLength, e.mtime);
+    }
 }
 async function main() {
     await testObjectStore();
