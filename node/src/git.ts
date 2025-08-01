@@ -23,7 +23,7 @@ export class Repo {
   async readObject(hash: Hash): Promise<GitObject> {
     /*const filePath = this.getObjectPath(hash);
     const compressed = await fs.promises.readFile(filePath);*/
-    const compressed = await this.objectStore.get(hash);
+    const {mtime, content:compressed} = await this.objectStore.get(hash);
 
     const data = Buffer.from(await inflate(new Uint8Array(compressed)));
 
@@ -47,6 +47,9 @@ export class Repo {
     const store = new Uint8Array(Buffer.concat([Buffer.from(header), content]));
     const hash = asHash( await sha1Hex(store));// crypto.createHash('sha1').update(store).digest('hex') );
 
+    if (await this.objectStore.has(hash)) {
+      return hash;
+    }
     const compressed = await deflate(store);
     this.objectStore.put(hash, compressed);
 

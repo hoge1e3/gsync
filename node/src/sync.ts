@@ -124,7 +124,15 @@ export class Sync {
         let donloaded=0, skipped=0;
         for (const { hash, content } of objects) {
             asHash(hash);
-            const dir = hash.slice(0, 2);
+            donloaded++;
+            if (await this.objectStore.has(hash)) {
+                skipped++;
+            } else {
+                const binary = Buffer.from(content, 'base64');
+                await this.objectStore.put(hash,  binary);
+            }
+    
+            /*const dir = hash.slice(0, 2);
             const file = hash.slice(2);
             const dirPath = path.join(objectsDir, dir);
             const filePath = path.join(dirPath, file);
@@ -141,7 +149,7 @@ export class Sync {
             } else {
                 skipped++;
                 //console.log('Skipped (exists):', hash);
-            }
+            }*/
         }
         console.log(donloaded," objects downloaded. ",skipped," objects skipped.");
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
