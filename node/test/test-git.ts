@@ -7,8 +7,8 @@ import { sha1Hex } from "../src/codec.js";
 import _crypto from 'crypto';
 const branch_main = asBranchName("main");
 const localRef_main = asLocalRef(branch_main);
-import path from "path";
-import fs from "fs";
+import * as path from "path";
+import * as fs from "fs";
 import { FileBasedObjectStore, ObjectEntry } from "../src/objects.js";
 export async function testHash2(){
     const repo=new Repo(asFilePath("../.gsync"));

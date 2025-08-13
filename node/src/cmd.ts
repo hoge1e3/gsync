@@ -1,8 +1,8 @@
-import path from "path";
+import * as path from "path";
 import { Repo, stripCR } from "./git.js";
-import { Config, GIT_DIR_NAME, Sync } from "./sync.js";
-import { asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash } from "./types.js";
-import fs from "fs";
+import { GIT_DIR_NAME, Sync } from "./sync.js";
+import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash } from "./types.js";
+import * as fs from "fs";
 
 export async function main(cwd=process.cwd(), argv=process.argv) {
     // 1st command line arg is either clone commit sync
@@ -82,8 +82,8 @@ async function _clone(into:FilePath, config:Config,  branch: BranchName, gitDirN
     const newGitDir=asFilePath(path.join(into,gitDirName));
     fs.mkdirSync(newGitDir);
     const newSync=new Sync(newGitDir);
-    const repo=new Repo(newGitDir);
     await newSync.writeConfig(config);
+    const repo=new Repo(newGitDir);
     await newSync.downloadObjects();
     const headCommitHash=await newSync.getRemoteHead(branch);
     repo.updateHead(asLocalRef(branch), headCommitHash );

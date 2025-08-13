@@ -1,17 +1,10 @@
-import fs, { mkdir } from 'fs';
-import path from 'path';
-import { asHash, BranchName, Hash,FilePath, asFilePath } from './types.js';
-import { FileBasedObjectStore, ObjectStore } from './objects.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config } from './types.js';
+import { factory, ObjectStore } from './objects.js';
+import { REMOTE_CONF_FILE, REMOTE_STATE_FILE } from './constants.js';
 
 
-export type Config = {
-    serverUrl: string,
-    repoId: string,
-};
-export type State = {
-    downloadSince: number,
-    uploadSince: number,
-};
 export const GIT_DIR_NAME=".gsync";
 export async function postJson(url:string, data={}){
     const response=await fetch(url, {method:"POST", body:JSON.stringify(data)});
@@ -21,10 +14,15 @@ export async function postJson(url:string, data={}){
     return {data: (await response.json()) as any};
 }
 export class Sync {
-    objectStore: ObjectStore;
+    _objectStore: ObjectStore|undefined;
     constructor(public gitDir: FilePath) { 
-        const objdir = asFilePath(path.join(this.gitDir, 'objects'));
-        this.objectStore=new FileBasedObjectStore(objdir);        
+    }
+    async getObjectStore(): Promise<ObjectStore> {
+        if (this._objectStore) return this._objectStore;
+        this._objectStore=await factory(this.gitDir);
+        /*const objdir = asFilePath(path.join(this.gitDir, 'objects'));
+        this._objectStore=new FileBasedObjectStore(objdir);   */
+        return this._objectStore;
     }
     async init(serverUrl: string):Promise<string> {
         if (fs.existsSync(this.gitDir)) {
@@ -57,7 +55,7 @@ export class Sync {
         await fs.promises.writeFile(conffile, JSON.stringify(conf));
     }
     private confFile() {
-        return asFilePath(path.join(this.gitDir, "remote-conf.json"));
+        return asFilePath(path.join(this.gitDir, REMOTE_CONF_FILE));
     }
 
     async readState(): Promise<State> {
@@ -72,7 +70,7 @@ export class Sync {
         return state;
     }
     private stateFile() {
-        return asFilePath(path.join(this.gitDir, "remote-state.json"));
+        return asFilePath(path.join(this.gitDir, REMOTE_STATE_FILE));
     }
     async writeState(state: State) {
         const statefile = this.stateFile();
@@ -87,8 +85,8 @@ export class Sync {
 
         //const dirs = fs.readdirSync(objectsDir).filter(d => /^[0-9a-f]{2}$/.test(d));
         const newUploadSince = Math.floor(Date.now() / 1000);
-
-        for await (const entry of this.objectStore.iterate(new Date(state.uploadSince * 1000))) {
+        const objectStore=await this.getObjectStore();
+        for await (const entry of objectStore.iterate(new Date(state.uploadSince * 1000))) {
             objects.push({
                 hash: entry.hash,
                 content: toBase64(entry.content)
@@ -121,15 +119,16 @@ export class Sync {
 
         const objects: { hash: Hash; content: string }[] = res.data.objects;
         const newDownloadSince = res.data.newest - 0;
+        const objectStore=await this.getObjectStore();
         let donloaded=0, skipped=0;
         for (const { hash, content } of objects) {
             asHash(hash);
             donloaded++;
-            if (await this.objectStore.has(hash)) {
+            if (await objectStore.has(hash)) {
                 skipped++;
             } else {
                 const binary = Buffer.from(content, 'base64');
-                await this.objectStore.put(hash,  binary);
+                await objectStore.put(hash,  binary);
             }
     
             /*const dir = hash.slice(0, 2);

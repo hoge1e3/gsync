@@ -7,14 +7,19 @@ import ignore from 'ignore';
 //import { promisify } from 'util';
 import { asFilename, asHash, asMode, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef, PathInRepo, FilePath, asFilePath, asPathInRepo } from './types.js';
 import { inflate, deflate ,sha1Hex } from './codec.js';
-import { FileBasedObjectStore, ObjectStore } from './objects.js';
+import { factory, ObjectStore } from './objects.js';
 /*const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);*/
 export class Repo {
-  objectStore:ObjectStore;
+  _objectStore:ObjectStore|undefined;
   constructor(public gitDir: FilePath) {
-     const objdir = asFilePath(path.join(this.gitDir, 'objects'));
-     this.objectStore=new FileBasedObjectStore(objdir);
+  }
+  async getObjectStore(): Promise<ObjectStore> {
+    if (this._objectStore) return this._objectStore;
+    this._objectStore=await factory(this.gitDir);
+    /*const objdir = asFilePath(path.join(this.gitDir, 'objects'));
+    this._objectStore=new FileBasedObjectStore(objdir);   */
+    return this._objectStore;
   }
   toFilePath(pathInRepo: PathInRepo) {
     const r=path.join(this.workingDir(), pathInRepo );
@@ -23,7 +28,8 @@ export class Repo {
   async readObject(hash: Hash): Promise<GitObject> {
     /*const filePath = this.getObjectPath(hash);
     const compressed = await fs.promises.readFile(filePath);*/
-    const {mtime, content:compressed} = await this.objectStore.get(hash);
+    const objectStore=await this.getObjectStore();
+    const {mtime, content:compressed} = await objectStore.get(hash);
 
     const data = Buffer.from(await inflate(new Uint8Array(compressed)));
 
@@ -46,12 +52,12 @@ export class Repo {
     const header = `${type} ${content.length}\0`;
     const store = new Uint8Array(Buffer.concat([Buffer.from(header), content]));
     const hash = asHash( await sha1Hex(store));// crypto.createHash('sha1').update(store).digest('hex') );
-
-    if (await this.objectStore.has(hash)) {
+    const objectStore=await this.getObjectStore();
+    if (await objectStore.has(hash)) {
       return hash;
     }
     const compressed = await deflate(store);
-    this.objectStore.put(hash, compressed);
+    objectStore.put(hash, compressed);
 
     /*const filePath = this.getObjectPath(hash);
     if (fs.existsSync(filePath)) {

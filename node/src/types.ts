@@ -1,5 +1,14 @@
 
 const SymHash=Symbol("hash");
+export type Config = {
+    serverUrl: string,
+    repoId: string,
+};
+export type State = {
+    downloadSince: number,
+    uploadSince: number,
+};
+
 export type Hash=string&{[SymHash]:undefined};
 export function isHash(s: string): s is Hash {
   return /^[0-9a-f]{40}$/.test(s);  

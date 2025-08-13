@@ -1,7 +1,8 @@
-import { asFilePath, asHash, FilePath, Hash } from "./types.js";
+import { asFilePath, asHash, Config, FilePath, Hash } from "./types.js";
 import * as path from "path";
 import * as fs from "fs";
 import MutablePromise from "mutable-promise";
+import { DB_PREFIX, REMOTE_CONF_FILE, STORE_NAME } from "./constants.js";
 export type ObjectValue = {
     content: Uint8Array;
     mtime: Date;
@@ -15,16 +16,26 @@ export interface ObjectStore {
     put(hash: Hash, compressed: Uint8Array): Promise<void>;
     iterate(since: Date): AsyncGenerator<ObjectEntry>;
 }
+export async function factory(gitDir:FilePath):Promise<ObjectStore>{
+    const objdir = asFilePath(path.join(gitDir, 'objects'));
+    if (globalThis.indexedDB && !fs.existsSync(objdir)) {
+        const conffile = asFilePath(path.join(gitDir, REMOTE_CONF_FILE));
+        const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as Config;
+        return new IndexedDBBasedObjectStore(DB_PREFIX+"_"+conf.repoId);
+    } else {
+        return new FileBasedObjectStore(objdir);   
+    }
+}
 export class IndexedDBBasedObjectStore implements ObjectStore {
     private db: IDBDatabase | null = null;
     dbInit=new MutablePromise<IDBDatabase>();
-    constructor(public dbName: string, public storeName: string) {
+    constructor(public dbName: string) {
         // Initialize IndexedDB
         const request = indexedDB.open(dbName);
         request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
             const db = (event.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains(this.storeName)) {
-                db.createObjectStore(this.storeName);
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
             }
         };
         request.onsuccess = (event: Event) => {
@@ -40,8 +51,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
     async has(hash: Hash): Promise<boolean> {
         await this.dbInit;
         return new Promise((resolve, reject) => {
-            const transaction = this.db!.transaction(this.storeName);
-            const store = transaction.objectStore(this.storeName);
+            const transaction = this.db!.transaction(STORE_NAME);
+            const store = transaction.objectStore(STORE_NAME);
             const request = store.count(hash);
             request.onsuccess = () => resolve(request.result > 0);
             request.onerror = () => reject(request.error);
@@ -50,8 +61,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
     async get(hash: Hash): Promise<ObjectValue> {
         await this.dbInit;
         return new Promise((resolve, reject) => {
-            const transaction = this.db!.transaction(this.storeName);
-            const store = transaction.objectStore(this.storeName);
+            const transaction = this.db!.transaction(STORE_NAME);
+            const store = transaction.objectStore(STORE_NAME);
             const request = store.get(hash);
             request.onsuccess = () => {
                 if (request.result) {
@@ -67,9 +78,9 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
     async put(hash: Hash, compressed: Uint8Array): Promise<void> {
         await this.dbInit;
         return new Promise((resolve, reject) => {
-            const transaction = this.db!.transaction(this.storeName, "readwrite");
+            const transaction = this.db!.transaction(STORE_NAME, "readwrite");
             const value:ObjectValue = { content: compressed, mtime: new Date() };
-            const store = transaction.objectStore(this.storeName);
+            const store = transaction.objectStore(STORE_NAME);
             const request = store.put(value, hash);
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
@@ -77,8 +88,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
     }
     async *iterate(since: Date): AsyncGenerator<ObjectEntry> {
         await this.dbInit;
-        const transaction = this.db!.transaction(this.storeName, "readonly");
-        const store = transaction.objectStore(this.storeName);
+        const transaction = this.db!.transaction(STORE_NAME, "readonly");
+        const store = transaction.objectStore(STORE_NAME);
         const request = store.openCursor();
         let resolve: (value?: ObjectEntry | undefined) => void;
         let reject: (reason?: any) => void;
