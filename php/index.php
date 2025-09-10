@@ -2,7 +2,11 @@
 require_once "ErrorHandler.php";
 require_once 'utils.php';
 require_once 'log.php';
+require_once "config.php";
 header("Content-Type: application/json");
+if (defined("ALLOW_ORIGIN")){
+    header("Access-Control-Allow-Origin: ".ALLOW_ORIGIN);
+}
 $method = $_SERVER['REQUEST_METHOD'];
 $path = $_GET['action'] ?? '';
 

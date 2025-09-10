@@ -1,6 +1,6 @@
 <?php
 
-define('REPO_DIR', __DIR__ . '/storage');
+require_once "config.php";
 require_once 'log.php';
 function createRepo(): string {
     do {

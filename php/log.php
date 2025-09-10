@@ -1,5 +1,6 @@
 <?php
-$LOG_FILE = __DIR__ . '/storage/log.jsonl';
+require_once("config.php");
+$LOG_FILE = REPO_DIR."/log.jsonl";
 $id=rand(100000, 999999);
 function logMessage($body) {
     global $LOG_FILE, $id;
