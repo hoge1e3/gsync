@@ -48,6 +48,10 @@ export class Sync {
     async readConfig(): Promise<Config> {
         const conffile = this.confFile();
         const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as Config;
+        if (!conf.apiKey) {
+            conf.apiKey=Math.random().toString(36).slice(2);
+            await this.writeConfig(conf);
+        }
         return conf;
     }
     async writeConfig(conf:Config): Promise<void> {
