@@ -3,6 +3,7 @@ const SymHash=Symbol("hash");
 export type Config = {
     serverUrl: string,
     repoId: string,
+    apiKey?: string,
 };
 export type State = {
     downloadSince: number,

@@ -100,6 +100,7 @@ export class Sync {
 
         const res = await postJson(`${config.serverUrl}?action=upload`, {
             repo_id: config.repoId,
+            api_key: config.apiKey,
             objects
         });
         await this.writeState({ uploadSince: newUploadSince, downloadSince: state.downloadSince });
@@ -114,6 +115,7 @@ export class Sync {
 
         const res = await postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
+            api_key: config.apiKey,
             since: state.downloadSince,
         });
 
@@ -155,10 +157,11 @@ export class Sync {
 
     }
     async hasRemoteHead(branch: BranchName):Promise<boolean> {
-        const { repoId, serverUrl } = await this.readConfig();
+        const { repoId, serverUrl, apiKey } = await this.readConfig();
         const res = await postJson(`${serverUrl}?action=get_head`, {
             repo_id: repoId,
             allow_nonexistent: 1,
+            api_key: apiKey,
             branch
         });
         return !!res.data.hash;
@@ -166,11 +169,12 @@ export class Sync {
 
 
     async getRemoteHead(branch: BranchName): Promise<Hash> {
-        const { repoId, serverUrl } = await this.readConfig();
+        const { repoId, serverUrl, apiKey } = await this.readConfig();
 
         const res = await postJson(`${serverUrl}?action=get_head`, {
             repo_id: repoId,
-            branch
+            branch,
+            api_key: apiKey,
         });
 
         const hash = res.data.hash as Hash;
@@ -179,12 +183,13 @@ export class Sync {
         return hash;
     }
     async setRemoteHead(branch: BranchName, current:Hash, next:Hash): Promise<void> {
-        const { repoId, serverUrl } = await this.readConfig();
+        const { repoId, serverUrl, apiKey } = await this.readConfig();
         //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
         const {data}=await postJson(`${serverUrl}?action=set_head`, {
             repo_id: repoId,
             branch,
             current, next,
+            api_key: apiKey, 
         });
         if (data.status==="ok") {
             return ;
@@ -192,12 +197,13 @@ export class Sync {
         throw new Error("Atomic change failed: Someone changed the head to "+data.status);
     }
     async addRemoteHead(branch: BranchName, next:Hash): Promise<void> {
-        const { repoId, serverUrl } = await this.readConfig();
+        const { repoId, serverUrl, apiKey } = await this.readConfig();
         //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
         const {data}=await postJson(`${serverUrl}?action=set_head`, {
             repo_id: repoId,
             branch,
             next,
+            api_key: apiKey,
         });
         if (data.status==="ok") {
             return ;
