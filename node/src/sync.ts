@@ -9,6 +9,11 @@ export const GIT_DIR_NAME=".gsync";
 export async function postJson(url:string, data={}){
     const response=await fetch(url, {method:"POST", body:JSON.stringify(data)});
     if (response.status!==200) {
+        if(response.status===403) {
+            const str=await response.text();
+            console.log(str);
+            throw new Error(str);
+        }
         throw new Error(await response.text());
     }
     return {data: (await response.json()) as any};

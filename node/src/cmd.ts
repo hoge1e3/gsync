@@ -70,7 +70,7 @@ export async function init(cwd: string, serverUrl: string, gitDirName=GIT_DIR_NA
     return repoId;
 }
 export async function clone(into:string,    serverUrl: string, repoId: string, branch="main") {
-    await _clone(asFilePath(into), {serverUrl,repoId} , asBranchName(branch) );
+    await _clone(asFilePath(into), {serverUrl,repoId,apiKey:Math.random().toString(36).slice(2)} , asBranchName(branch) );
 }
 
 async function _clone(into:FilePath, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME) {
