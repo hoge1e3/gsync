@@ -40,6 +40,7 @@ export class Sync {
         const conf: Config = {
             serverUrl,
             repoId: res.data.repo_id,
+            apiKey: Math.random().toString(36).slice(2) ,
         };
         await fs.promises.mkdir(this.gitDir, { recursive: true });
         await this.writeConfig(conf);

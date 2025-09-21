@@ -3,12 +3,14 @@ const SymHash=Symbol("hash");
 export type Config = {
     serverUrl: string,
     repoId: string,
-    apiKey?: string,
+    apiKey: string,
 };
 export type State = {
     downloadSince: number,
     uploadSince: number,
 };
+export type SyncStatus="pushed"|"pulled"|"auto-merged"|Conflicts;
+export type Conflicts=PathInRepo[];
 
 export type Hash=string&{[SymHash]:undefined};
 export function isHash(s: string): s is Hash {

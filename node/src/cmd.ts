@@ -1,7 +1,7 @@
 import * as path from "path";
 import { Repo, stripCR } from "./git.js";
 import { GIT_DIR_NAME, Sync } from "./sync.js";
-import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash } from "./types.js";
+import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus } from "./types.js";
 import * as fs from "fs";
 
 export async function main(cwd=process.cwd(), argv=process.argv) {
@@ -133,7 +133,7 @@ export async function commit(dir: string):Promise<Hash> {
     await repo.updateHead(ref, newCommitHash);
     return newCommitHash;
 }
-export async function sync(dir: string) {
+export async function sync(dir: string):Promise<SyncStatus> {
 
     const localCommitHash=await commit(dir);
     const gitDir = findGitDir(asFilePath(dir));
