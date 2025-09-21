@@ -9,8 +9,9 @@ export type State = {
     downloadSince: number,
     uploadSince: number,
 };
-export type SyncStatus="pushed"|"pulled"|"auto-merged"|Conflicts;
-export type Conflicts=PathInRepo[];
+export type SyncStatus="auto_merged"|SyncStatusExceptAutoMerged;
+export type SyncStatusExceptAutoMerged="no_changes"|"newly_pushed"|"pushed"|"pulled"|Conflicted;
+export type Conflicted=PathInRepo[];
 
 export type Hash=string&{[SymHash]:undefined};
 export function isHash(s: string): s is Hash {

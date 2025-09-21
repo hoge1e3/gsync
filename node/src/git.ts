@@ -25,6 +25,11 @@ export class Repo {
     const r=path.join(this.workingDir(), pathInRepo );
     return asFilePath(r);
   }
+  toPathInRepo(filePath: FilePath):PathInRepo {
+    const r=path.relative(this.workingDir(), filePath);
+    if (r.startsWith("..")) throw new Error(`${filePath} is out of working dir ${this.workingDir()}`);
+    return asPathInRepo(r);
+  }
   async readObject(hash: Hash): Promise<GitObject> {
     /*const filePath = this.getObjectPath(hash);
     const compressed = await fs.promises.readFile(filePath);*/

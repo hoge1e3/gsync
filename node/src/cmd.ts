@@ -1,10 +1,10 @@
 import * as path from "path";
 import { Repo, stripCR } from "./git.js";
 import { GIT_DIR_NAME, Sync } from "./sync.js";
-import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus } from "./types.js";
+import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, SyncStatusExceptAutoMerged } from "./types.js";
 import * as fs from "fs";
 
-export async function main(cwd=process.cwd(), argv=process.argv) {
+export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
     // 1st command line arg is either clone commit sync
     // call corresponding function
     const [,, command, ...args] = argv;
@@ -17,29 +17,23 @@ export async function main(cwd=process.cwd(), argv=process.argv) {
                 return;
             }
             const b=args[2]||"main";
-            await clone(cwd, args[0], args[1],b);
-            break;
+            return await clone(cwd, args[0], args[1],b);
         case "init":
             if (args.length<1) {
                 console.log(argv.join(" ")+" <serverUrl>");
                 return;
             }
             const serverUrl=args[0];
-            await init(cwd, serverUrl, GIT_DIR_NAME);
-            break;
+            return await init(cwd, serverUrl, GIT_DIR_NAME);
         case "commit":
-            await commit(cwd);
-            break;
+            return await commit(cwd);
         case "sync":
         case undefined:
-            await sync(cwd);
-            break;
+            return await syncWithRetry(cwd);
         case "log":
-            await log(cwd);
-            break;
+            return await log(cwd);
         case "cat-file":
-            await catFile(cwd, args[0]);
-            break;
+            return await catFile(cwd, args[0]);
         default:
             throw new Error(`Unknown command: ${command}`);
     }
@@ -133,6 +127,13 @@ export async function commit(dir: string):Promise<Hash> {
     await repo.updateHead(ref, newCommitHash);
     return newCommitHash;
 }
+export async function syncWithRetry(dir: string): Promise<SyncStatusExceptAutoMerged> {
+    for(let i=0;i<5;i++) {
+        let r=await sync(dir);
+        if (r!=="auto_merged") return r;
+    }
+    throw new Error("Auto-merge repeated 5 times. Aborted.");
+}
 export async function sync(dir: string):Promise<SyncStatus> {
 
     const localCommitHash=await commit(dir);
@@ -145,7 +146,7 @@ export async function sync(dir: string):Promise<SyncStatus> {
         await sync.uploadObjects();
         console.log("Push ",branch, " into ", localCommitHash);
         await sync.addRemoteHead(branch, localCommitHash);
-        return ;
+        return "newly_pushed";
     }
     const remoteCommitHash=await sync.getRemoteHead(branch);
     await sync.downloadObjects();
@@ -154,12 +155,12 @@ export async function sync(dir: string):Promise<SyncStatus> {
         // update remote
         if (localCommitHash===remoteCommitHash) {
             console.log("Remote is up-to-date: ",localCommitHash);
-            return;
+            return "no_changes";
         }
         await sync.uploadObjects();
         console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
         await sync.setRemoteHead(branch, remoteCommitHash, localCommitHash);
-        return ;
+        return "pushed";
     }
     const localCommit=await repo.readCommit(localCommitHash);
     const remoteCommit=await repo.readCommit(remoteCommitHash);
@@ -171,7 +172,7 @@ export async function sync(dir: string):Promise<SyncStatus> {
         await repo.applyDiff(diff);
         await repo.updateHead(asLocalRef(branch), remoteCommitHash);
         console.log("Update local branch", localCommitHash, "to" ,remoteCommitHash);
-        return;
+        return "pulled";
     }   
     const baseCommit=await repo.readCommit(baseCommitHash);
     const baseTree=await repo.readTree(baseCommit.tree);
@@ -182,9 +183,10 @@ export async function sync(dir: string):Promise<SyncStatus> {
         console.log("Auto-Merged from ",remoteCommit);
         const mergedCommitHash=await commit(dir);
         console.log("Merged commit hash: ",mergedCommitHash);
-        console.log("Run sync again to push merged commit");       
+        console.log("Run sync again to push merged commit");      
+        return "auto_merged"; 
     } else {
-        let confc=0;
+        let confpaths:Conflicted=[];
         for (let c of conflicts) {
             const obj=await repo.readObject(c.b);
             const postfix=`(${remoteCommitHash.substring(0,8)})`;
@@ -192,18 +194,21 @@ export async function sync(dir: string):Promise<SyncStatus> {
             const oldContent = fs.readFileSync(oldPath);
             const newPath = makePostfix(oldPath, postfix);
             if (isConflicting(oldContent, obj.content)) {
-                confc++;
-                if (confc==1) console.log("CONFLICT");
+                confpaths.push(repo.toPathInRepo(newPath));
+                if (confpaths.length==1) console.log("CONFLICT");
                 console.log(`Conflict saved at ${newPath}`);
                 fs.writeFileSync(newPath, obj.content);
             }
         }
-        if (confc>0) console.log("Resolve conflicts and run sync again");
-        else {
+        if (confpaths.length>0) {
+            console.log("Resolve conflicts and run sync again");
+            return confpaths;
+        } else {
             console.log("Auto-Merged from ",remoteCommit);
             const mergedCommitHash=await commit(dir);
             console.log("Merged commit hash: ",mergedCommitHash);
             console.log("Run sync again to push merged commit");       
+            return "auto_merged"; 
         }
     }
 }
