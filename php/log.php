@@ -7,7 +7,9 @@ function logFile($repo) {
 }
 function api_keys($repo) {
     $res=[];
-    foreach(file(logFile($repo)) as $line){ 
+    $lf=logFile($repo);
+    if (!file_exists($lf))return $res;
+    foreach(file($lf) as $line){ 
         try {
             $o=json_decode($line);
             $api_key=$o->body->input->api_key;

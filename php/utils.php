@@ -185,3 +185,7 @@ function checkWriteAccess($repo, $providedKey) {
     return isset($keys[$providedKey]) && $keys[$providedKey] === "w";
 }
 
+function createAdminDir($repo_id) {
+    $dir=ADMIN_DIR."/$repo_id";
+    if (!file_exists($dir)) mkdir($dir);
+}
