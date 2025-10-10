@@ -13,12 +13,18 @@ function createRepo(): string {
 
     return $repo_id;
 }
+function repoPath($repo_id):string{
+    return REPO_DIR . "/$repo_id";
+}
+function repoExists($repo_id):bool{
+    return file_exists(repoPath($repo_id));
+}
 
 function uploadObjects(array $data): string {
     $repo_id = $data['repo_id'];
     $objects = $data['objects'];
     if (!checkWriteAccess($repo_id, $data["api_key"])) {
-        e505("You have no permission to write $repo_id");
+        e505("You have no permission to write $repo_id", $data);
     }
 
     $repo_path = REPO_DIR . "/$repo_id/objects";
@@ -111,7 +117,7 @@ function setHead(array $data): string {
     $current = $data['current'] ?? null;
     $next = $data['next'];
     if (!checkWriteAccess($repo_id, $data["api_key"])) {
-        e505("You have no permission to write $repo_id");
+        e505("You have no permission to write $repo_id", $data);
     }
 
     $heads_dir=REPO_DIR . "/$repo_id/refs/heads";
@@ -175,8 +181,7 @@ function checkWriteAccess($repo, $providedKey) {
     }
     $keys = json_decode(file_get_contents($keyFile), true);
     if (!is_array($keys)) return false;
-    if (isset($keys["*"])) return true;
-    // ハッシュ形式対応
+    if (isset($keys["*"]) && $keys["*"]==="w") return true;
     return isset($keys[$providedKey]) && $keys[$providedKey] === "w";
 }
 

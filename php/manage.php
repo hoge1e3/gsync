@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . "/utils.php";
+require_once __DIR__ . "/log.php";
 
 $repoId = isset($_POST['repo']) ? $_POST["repo"] : 
          (isset($_GET['repo'])  ? $_GET["repo"]  : '' );
@@ -14,10 +16,13 @@ if ($repoId === '') {
     <h1>Set new password to Repository</h1>
     <form method="post">
         <label>Repository ID : <input name="repo"></label><Br/>
-        <button type="submit">Set password</button>
+        <button type="submit">Next &gt;&gt;</button>
     </form>
     <?php
     exit;//die("Repository ID is required.");
+}
+if (!repoExists($repoId)) {
+    die("No such repository: $repoId");    
 }
 
 $repoAdminDir = ADMIN_DIR . '/' . $repoId;
@@ -39,12 +44,14 @@ if (!file_exists($passwordFile)) {
         echo "Admin password set. <a href=\"?repo=" . htmlspecialchars($repoId) . "\">Login</a>";
         exit;
     }
+
     ?>
     <h1>Set Admin Password for Repository: <?=htmlspecialchars($repoId)?></h1>
     <form method="post">
         <input type="hidden" name="repo" value="<?= htmlspecialchars($repoId)?>"/>
         <label>New Password: <input type="password" name="new_password"></label>
         <button type="submit">Set Password</button>
+        <div><strong>Caution!</strong> Password can NOT be changed / reset.</div>
     </form>
     <?php
     exit;
@@ -105,3 +112,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <label>API Key: <input type="text" name="new_apikey"></label>
     <button type="submit">Add</button>
 </form>
+
+<h2>Access log</h2>
+<ul>
+<?php
+foreach( api_keys($repoId) as $key=>$time){
+    ?>
+    <li><?=htmlspecialchars($key) ?> - <?=htmlspecialchars($time) ?></li>
+    <?php
+}
+?>
+</ul>

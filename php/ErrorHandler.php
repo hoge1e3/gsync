@@ -21,10 +21,10 @@ function h_err($errno, $errstr, $errfile, $errline) {
     //die ("SERVER ERROR!\n$errStatus $errno $errstr $errfile:$errline$buf\nSERVER ERROR END!");
     //exit(1);
 }
-function e505($data) {
+function e505($data, $body="") {
     header("Content-type: text/json; charset=utf8");
     http_response_code(500);
-    logMessage(["error" => $data]);
+    logMessage(["error" => $data, "body"=>$body]);
     echo json_encode($data);
     exit(1);
 }
