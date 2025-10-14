@@ -12,7 +12,8 @@
     "version": "1.0.3",
     "type": "module",
     "devDependencies": {
-        "@types/node": "^24.0.3",
+        "@types/web": "^0.0.278",
+        "@types/node": "^24.7.2",
         "typescript": "^5.8.3"
     },
     "dependencies": {
