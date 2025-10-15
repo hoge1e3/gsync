@@ -3,6 +3,13 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . "/utils.php";
 require_once __DIR__ . "/log.php";
 
+function clone_cmd(){
+    global $repoId;
+    $uri=(empty($_SERVER['HTTPS']) ? 'http://' : 'https://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+    $uri=preg_replace("/manage\\.php/","index.php", $uri);
+    $uri=preg_replace("/\\?.*/","", $uri);
+    return "gsync clone $uri $repoId";
+}
 $repoId = isset($_POST['repo']) ? $_POST["repo"] : 
          (isset($_GET['repo'])  ? $_GET["repo"]  : '' );
 if ($repoId === '') {
@@ -94,7 +101,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <h1>Manage API Keys for Repository: <?=htmlspecialchars($repoId)?></h1>
-
+clone Command: <input 
+    size="<?= strlen(clone_cmd()) ?>" 
+    value="<?= htmlspecialchars(clone_cmd()) ?>"/>
 <h2>Registered API Keys</h2>
 <ul>
 <?php foreach ($apikeys as $k=>$v): ?>
