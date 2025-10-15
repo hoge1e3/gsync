@@ -145,10 +145,14 @@ export class Repo {
   async buildTreeFromWorkingDir(): Promise<TreeEntry[]> {
     const workingDir = this.workingDir();
     const ig = new RecursiveGitIgnore();
-    const base=path.basename(this.gitDir);
+    const dot_gsync=path.basename(this.gitDir);
     const baseig=ignore();
     baseig.add(".git");
-    baseig.add(base);
+    baseig.add(dot_gsync);
+    const isSubRepo=(dir:FilePath):boolean=>{
+      return fs.existsSync(path.join(dir, ".git")) || 
+             fs.existsSync(path.join(dir, dot_gsync))
+    };
     const walk = async (dir: FilePath): Promise<TreeEntry[]> => {
       ig.push(dir);
       try {
@@ -177,7 +181,7 @@ export class Repo {
             //console.log("File" , fullPath, hash);
 
             entries.push({ mode: '100644', name, hash });
-          } else if (file.isDirectory()) {
+          } else if (file.isDirectory() && !isSubRepo(fullPath)) {
             const childEntries = await walk(fullPath);
             const treeHash = await this.writeTree(childEntries);
             //console.log("Dir" , fullPath, treeHash);
@@ -498,11 +502,24 @@ export class Repo {
     }
   }
   async applyDiff(diffs: TreeDiffEntry[]): Promise<void> {
-    const workDir = path.dirname(this.gitDir); // ワーキングディレクトリ
+    const workDir = this.workingDir();
+    const dot_gsync=path.basename(this.gitDir);
+    const isSubRepo=(dir:FilePath):boolean=>{
+      return fs.existsSync(path.join(dir, ".git")) || 
+             fs.existsSync(path.join(dir, dot_gsync))
+    };
+    const inSubRepo=(dir:FilePath):boolean=>{
+      for(;
+        path.normalize(workDir)!==path.normalize(dir);
+        dir=asFilePath(path.dirname(dir))) {
+        if (isSubRepo(dir))return true;
+      }
+      return false;     
+    };
 
     for (const diff of diffs) {
       const filePath = path.join(workDir, diff.path);
-
+      if (inSubRepo(asFilePath(path.dirname(filePath))))continue;
       if (diff.type === 'deleted') {
         await fs.promises.rm(filePath, { force: true });
       } else if (diff.type === 'added' || diff.type === 'modified') {
