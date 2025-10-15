@@ -40,11 +40,13 @@ function logMessage($body) {
         'body' => $body
     ]) . PHP_EOL;
     try {
-        $repo=$body["input"]["repo_id"];
-        if ($repo){
-            $logFileByRepo=logFile($repo);
-            if (file_exists(dirname($logFileByRepo))) {
-                file_put_contents($logFileByRepo, $logEntry, FILE_APPEND);
+        if (isset($body["input"]) && isset($body["input"]["repo_id"])) {
+            $repo=$body["input"]["repo_id"];
+            if ($repo){
+                $logFileByRepo=logFile($repo);
+                if (file_exists(dirname($logFileByRepo))) {
+                    file_put_contents($logFileByRepo, $logEntry, FILE_APPEND);
+                }
             }
         }
     } catch(Throwable $e) {
