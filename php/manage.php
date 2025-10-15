@@ -12,23 +12,34 @@ function clone_cmd(){
 }
 $repoId = isset($_POST['repo']) ? $_POST["repo"] : 
          (isset($_GET['repo'])  ? $_GET["repo"]  : '' );
+function login_form($repoId='') {
+?>
+    <h1>Login to Manage Repository</h1>
+    <form method="post">
+        <label>Repository ID : <input name="repo" value="<?= htmlspecialchars($repoId) ?>"></label><Br/>
+        <label>Password: <input type="password" name="password"></label><br/>
+        <button type="submit">Login</button>
+    </form>
+<?php
+}
+function new_password_form($repoId='') {
+?>
+    <h1>Set new password to Repository</h1>
+    <form method="post">
+        <label>Repository ID : <input name="repo" value="<?= htmlspecialchars($repoId) ?>"></label><Br/>
+        <button type="submit">Next &gt;&gt;</button>
+    </form>
+    <?php
+}
+
 if ($repoId === '') {
     ?>
     Read <a target="eula" href="eula.html">Terms of use</a> first.
     <hr/>
-    <h1>Login to Manage Repository</h1>
-    <form method="post">
-        <label>Repository ID : <input name="repo"></label><Br/>
-        <label>Password: <input type="password" name="password"></label><br/>
-        <button type="submit">Login</button>
-    </form>
-    <h1>Set new password to Repository</h1>
-    <form method="post">
-        <label>Repository ID : <input name="repo"></label><Br/>
-        <button type="submit">Next &gt;&gt;</button>
-    </form>
-    <?php
-    exit;//die("Repository ID is required.");
+    <?php 
+    login_form($repoID); 
+    new_password_form($repoId);
+    exit;
 }
 if (!repoExists($repoId)) {
     die("No such repository: $repoId");    
@@ -80,8 +91,7 @@ if (!isset($_SESSION['admin_'.$repoId])) {
             exit;
         }
     } else {
-        echo "Invalid operation. (Maybe password is already set.)";
-        ?><a href="?">Try again</a><?php
+        login_form($repoId);
         exit;
     }
 }
