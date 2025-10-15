@@ -14,6 +14,8 @@ $repoId = isset($_POST['repo']) ? $_POST["repo"] :
          (isset($_GET['repo'])  ? $_GET["repo"]  : '' );
 if ($repoId === '') {
     ?>
+    Read <a target="eula" href="eula.html">Terms of use</a> first.
+    <hr/>
     <h1>Login to Manage Repository</h1>
     <form method="post">
         <label>Repository ID : <input name="repo"></label><Br/>
