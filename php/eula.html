@@ -10,43 +10,45 @@
   gsync is a Git-like file synchronization service, mainly intended for personal development use.
   Please read the following terms carefully before using the service.
 </p>
-<h2>Definitions</h2>
-<ul>
-<li>file-sync-feature: The serivce for upload/download file objects in repositories, served via index.php</li>
-<li>manager: The serivce for manage repository and API keys , served via manage.php</li>
-</ul>
 
-<h2>Terms of use</h2>
 <ul>
-  <li>
-    You must access the 'file-sync-feature' only through the client software provided at
-    <a href="https://github.com/hoge1e3/acepad-git/tree/main/node" target="_blank">
-      https://github.com/hoge1e3/acepad-git/tree/main/node
-    </a>.
-  </li>
-  <li>
-    Each repository has a Repository ID issued by the 'file-sync-feature' service.  
-    Knowing this Repository ID is effectively the only requirement to access the repository.  
-    There is no strong authentication mechanism in place.
-  </li>
-  <li>
-    You must also provide an API key (any random string) when using the file-sync-feature client.  
-    This key is not used for authentication but only recorded in access logs 
-    to help identify the source of requests.
-  </li>
-  <li>
-    Anyone who knows your Repository ID and API key can access your repository data.  
-    Keep them secret. If they are leaked, your data may be accessed, modified, or deleted by others.  
-    The maintainer is not responsible for any unauthorized access.
-  </li>
-  <li>
-    The “manager” service manages access permissions for each repository, 
-    allowing or denying access based on specified API keys. 
-    To log in to the “manager” service, you must set a password for the repository. 
-    If no password is set to a repository, 
-    the user who first access to the repository via 'manager' can set the password. 
-    This password cannot be changed or recovered.
-  </li>
+  <li>"file-sync-feature" is the serivce for upload/download file objects in repositories, served via index.php</li>
+  <ul>
+    <li>
+      You must access the "file-sync-feature" only through the client software provided at
+      <a href="https://github.com/hoge1e3/acepad-git/tree/main/node" target="_blank">
+        https://github.com/hoge1e3/acepad-git/tree/main/node
+      </a>.
+    </li>
+    <li>
+      Each repository has a Repository ID issued by the "file-sync-feature" service.  
+      Knowing this Repository ID is effectively the only requirement to access the repository.  
+      There is no strong authentication mechanism in place.
+    </li>
+    <li>
+      You must also provide an API key (any random string) when using the file-sync-feature client.  
+      This key is not used for authentication but only recorded in access logs 
+      to help identify the source of requests.
+    </li>
+    <li>
+      Anyone who knows your Repository ID and API key can access your repository data.  
+      Keep them secret. If they are leaked, your data may be accessed, modified, or deleted by others.  
+      The maintainer is not responsible for any unauthorized access.
+    </li>
+  </ul>
+  <li>The “manager” service manages access permissions for each repository, allowing or denying access based on specified API keys. The features are served via manage.php</li>
+  <ul>
+    <li>
+      To log in to the “manager” service, you must set a password for the repository. 
+    </li>
+    <li>
+      If no password is set to a repository, 
+      the user who first access to the repository via 'manager' can set the password. 
+    </li>
+    <li>
+      Once password is set, it cannot be changed. And it cannot be recovered if you forget it.
+    </li>
+  </ul>
   <li>
     Your data, including some past history, is stored on the server without encryption.  
     History retention is not guaranteed, and older history may be archived or removed in the future.
