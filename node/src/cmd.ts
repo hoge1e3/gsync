@@ -12,12 +12,17 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
     //const cwd = process.cwd();
     switch (command) {
         case "clone":
+        case "clone_xco":
             if (args.length<2) {
                 console.log(argv.join(" ")+" <serverUrl> <repoId>");
                 return;
             }
             const b=args[2]||"main";
-            return await clone(cwd, args[0], args[1],b);
+            if (command==="clone") {
+                return await clone(cwd, args[0], args[1],b);
+            } else {
+                return await clone_xco(cwd, args[0], args[1],b);
+            }
         case "init":
             if (args.length<1) {
                 console.log(argv.join(" ")+" <serverUrl>");
@@ -34,9 +39,21 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
             return await log(cwd);
         case "cat-file":
             return await catFile(cwd, args[0]);
+        case "manage":
+            return await manage(cwd);
         default:
             throw new Error(`Unknown command: ${command}`);
     }
+}
+export async function manage(cwd:string, gitDirName=GIT_DIR_NAME) {
+    const dir=path.join(cwd, gitDirName);
+    const gitDir=asFilePath(dir);
+    const sync=new Sync(gitDir);
+    const conf=await sync.readConfig();
+    const repoId=conf.repoId;
+    const url=conf.serverUrl;
+    const manage=url.replace(/\w+.php$/,"manage.php");
+    console.log(`Open ${manage}?repo=${repoId}`);
 }
 export async function catFile(dir: string, hash: string ) {
     const repo=new Repo(findGitDir(asFilePath(dir)));
@@ -66,9 +83,12 @@ export async function init(cwd: string, serverUrl: string, gitDirName=GIT_DIR_NA
 export async function clone(into:string,    serverUrl: string, repoId: string, branch="main") {
     await _clone(asFilePath(into), {serverUrl,repoId,apiKey:Math.random().toString(36).slice(2)} , asBranchName(branch) );
 }
+export async function clone_xco(into:string,    serverUrl: string, repoId: string, branch="main") {
+    await _clone(asFilePath(into), {serverUrl,repoId,apiKey:Math.random().toString(36).slice(2)} , asBranchName(branch) , GIT_DIR_NAME, true);
+}
 
-async function _clone(into:FilePath, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME) {
-    if (fs.existsSync(into) && fs.readdirSync(into).length>0) {
+async function _clone(into:FilePath, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME, skipCheckout=false) {
+    if (!skipCheckout && fs.existsSync(into) && fs.readdirSync(into).length>0) {
         throw new Error(`${into} is not empty.`);
     }
     console.log(`Cloning into ${into}...`);
@@ -81,8 +101,10 @@ async function _clone(into:FilePath, config:Config,  branch: BranchName, gitDirN
     await newSync.downloadObjects();
     const headCommitHash=await newSync.getRemoteHead(branch);
     repo.updateHead(asLocalRef(branch), headCommitHash );
-    const headCommit=await repo.readCommit(headCommitHash);
-    await repo.checkoutTreeToDir(headCommit.tree, into);
+    if (!skipCheckout) {
+        const headCommit=await repo.readCommit(headCommitHash);
+        await repo.checkoutTreeToDir(headCommit.tree, into);
+    }
     await repo.setCurrentBranchName(branch);
     return newSync;
 
