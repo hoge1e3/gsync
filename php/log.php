@@ -39,6 +39,7 @@ function logMessage($body) {
         'timestamp' => $timestamp, 
         'body' => $body
     ]) . PHP_EOL;
+    $log_written=false;
     try {
         if (isset($body["input"]) && isset($body["input"]["repo_id"])) {
             $repo=$body["input"]["repo_id"];
@@ -46,6 +47,7 @@ function logMessage($body) {
                 $logFileByRepo=logFile($repo);
                 if (file_exists(dirname($logFileByRepo))) {
                     file_put_contents($logFileByRepo, $logEntry, FILE_APPEND);
+                    $log_written=true;
                 }
             }
         }
@@ -55,5 +57,5 @@ function logMessage($body) {
         ]).PHP_EOL;
         file_put_contents($LOG_FILE, $errlog, FILE_APPEND);
     }
-    file_put_contents($LOG_FILE, $logEntry, FILE_APPEND);
+    if (!$log_written) file_put_contents($LOG_FILE, $logEntry, FILE_APPEND);
 }
