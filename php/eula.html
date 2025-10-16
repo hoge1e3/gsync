@@ -12,12 +12,12 @@
 </p>
 
 <ul>
-  <li>"file-sync-feature" is the serivce for upload/download file objects in repositories, served via index.php</li>
+  <li>"file-sync-feature" is the serivce for upload/download file objects in repositories, served via index.php.</li>
   <ul>
     <li>
       You must access the "file-sync-feature" only through the client software provided at
-      <a href="https://github.com/hoge1e3/acepad-git/tree/main/node" target="_blank">
-        https://github.com/hoge1e3/acepad-git/tree/main/node
+      <a href="https://github.com/hoge1e3/gsync/tree/main/node" target="_blank">
+        https://github.com/hoge1e3/gsync/tree/main/node
       </a>.
     </li>
     <li>
@@ -27,11 +27,11 @@
     </li>
     <li>
       You must also provide an API key (any random string) when using the file-sync-feature client.  
-      This key is not used for authentication but only recorded in access logs 
+      This key is not used for authentication by default(can be restricted by the settings of "manager"), but only recorded in access logs 
       to help identify the source of requests.
     </li>
     <li>
-      Anyone who knows your Repository ID and API key can access your repository data.  
+      Anyone who knows your Repository ID and aporopriate API key can access your repository data.  
       Keep them secret. If they are leaked, your data may be accessed, modified, or deleted by others.  
       The maintainer is not responsible for any unauthorized access.
     </li>
