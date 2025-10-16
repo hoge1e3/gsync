@@ -12,6 +12,10 @@ export type State = {
 export type SyncStatus="auto_merged"|SyncStatusExceptAutoMerged;
 export type SyncStatusExceptAutoMerged="no_changes"|"newly_pushed"|"pushed"|"pulled"|Conflicted;
 export type Conflicted=PathInRepo[];
+export type CloneOptions={
+  gitDirName: string,
+  allowNonEmpty?: "skipCheckout"|"overwrite",
+};
 
 export type Hash=string&{[SymHash]:undefined};
 export function isHash(s: string): s is Hash {

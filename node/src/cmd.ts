@@ -1,7 +1,7 @@
 import * as path from "path";
 import { Repo, stripCR } from "./git.js";
 import { GIT_DIR_NAME, Sync } from "./sync.js";
-import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, SyncStatusExceptAutoMerged } from "./types.js";
+import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, SyncStatusExceptAutoMerged, CloneOptions } from "./types.js";
 import * as fs from "fs";
 
 export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
@@ -12,7 +12,7 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
     //const cwd = process.cwd();
     switch (command) {
         case "clone":
-        case "clone_xco":
+        case "clone_overwrite":
             if (args.length<2) {
                 console.log(argv.join(" ")+" <serverUrl> <repoId>");
                 return;
@@ -21,7 +21,7 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
             if (command==="clone") {
                 return await clone(cwd, args[0], args[1],b);
             } else {
-                return await clone_xco(cwd, args[0], args[1],b);
+                return await clone(cwd, args[0], args[1],b, {gitDirName:GIT_DIR_NAME, allowNonEmpty:"overwrite"});
             }
         case "init":
             if (args.length<1) {
@@ -80,20 +80,19 @@ export async function init(cwd: string, serverUrl: string, gitDirName=GIT_DIR_NA
     repo.setCurrentBranchName(asBranchName("main"));
     return repoId;
 }
-export async function clone(into:string,    serverUrl: string, repoId: string, branch="main") {
-    await _clone(asFilePath(into), {serverUrl,repoId,apiKey:Math.random().toString(36).slice(2)} , asBranchName(branch) );
-}
-export async function clone_xco(into:string,    serverUrl: string, repoId: string, branch="main") {
-    await _clone(asFilePath(into), {serverUrl,repoId,apiKey:Math.random().toString(36).slice(2)} , asBranchName(branch) , GIT_DIR_NAME, true);
+export async function clone(into:string,    serverUrl: string, repoId: string, branch="main", options:CloneOptions={gitDirName:GIT_DIR_NAME}) {
+    await _clone(asFilePath(into), {serverUrl,repoId,apiKey:Math.random().toString(36).slice(2)} , asBranchName(branch), options );
 }
 
-async function _clone(into:FilePath, config:Config,  branch: BranchName, gitDirName=GIT_DIR_NAME, skipCheckout=false) {
-    if (!skipCheckout && fs.existsSync(into) && fs.readdirSync(into).length>0) {
-        throw new Error(`${into} is not empty.`);
+async function _clone(into:FilePath, config:Config,  branch: BranchName, options: CloneOptions) {
+    let skipco;
+    if (fs.existsSync(into) && fs.readdirSync(into).length>0) {
+        if (!options.allowNonEmpty) throw new Error(`${into} is not empty.`);
+        skipco=(options.allowNonEmpty==="skipCheckout");
     }
     console.log(`Cloning into ${into}...`);
     if (!fs.existsSync(into)) fs.mkdirSync(into);
-    const newGitDir=asFilePath(path.join(into,gitDirName));
+    const newGitDir=asFilePath(path.join(into, options.gitDirName));
     fs.mkdirSync(newGitDir);
     const newSync=new Sync(newGitDir);
     await newSync.writeConfig(config);
@@ -101,7 +100,7 @@ async function _clone(into:FilePath, config:Config,  branch: BranchName, gitDirN
     await newSync.downloadObjects();
     const headCommitHash=await newSync.getRemoteHead(branch);
     repo.updateHead(asLocalRef(branch), headCommitHash );
-    if (!skipCheckout) {
+    if (!skipco) {
         const headCommit=await repo.readCommit(headCommitHash);
         await repo.checkoutTreeToDir(headCommit.tree, into);
     }
