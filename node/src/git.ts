@@ -149,10 +149,6 @@ export class Repo {
     const baseig=ignore();
     baseig.add(".git");
     baseig.add(dot_gsync);
-    const isSubRepo=(dir:FilePath):boolean=>{
-      return fs.existsSync(path.join(dir, ".git")) || 
-             fs.existsSync(path.join(dir, dot_gsync))
-    };
     const walk = async (dir: FilePath): Promise<TreeEntry[]> => {
       ig.push(dir);
       try {
@@ -181,7 +177,7 @@ export class Repo {
             //console.log("File" , fullPath, hash);
 
             entries.push({ mode: '100644', name, hash });
-          } else if (file.isDirectory() && !isSubRepo(fullPath)) {
+          } else if (file.isDirectory() && !this.isSubRepo(fullPath)) {
             const childEntries = await walk(fullPath);
             const treeHash = await this.writeTree(childEntries);
             //console.log("Dir" , fullPath, treeHash);
@@ -200,7 +196,9 @@ export class Repo {
   workingDir() {
     return asFilePath(path.resolve(this.gitDir, '..'));
   }
-
+  inWorkingDir(_path: FilePath) {
+    return path.normalize(_path).startsWith(path.normalize(this.workingDir()));
+  }
   async readCommit(hash: Hash): Promise<CommitEntry> {
     const { type, content } = await this.readObject(hash);
     if (type !== 'commit') {
@@ -501,25 +499,30 @@ export class Repo {
       fs.promises.rm(MERGE_HEAD);
     }
   }
-  async applyDiff(diffs: TreeDiffEntry[]): Promise<void> {
-    const workDir = this.workingDir();
+  realGitRepoIsSubRepo():boolean{
+    return false;// TODO: configure
+  }
+  isSubRepo(dir:FilePath):boolean {
+    if (!this.inWorkingDir(dir)) return false;
     const dot_gsync=path.basename(this.gitDir);
-    const isSubRepo=(dir:FilePath):boolean=>{
-      return fs.existsSync(path.join(dir, ".git")) || 
-             fs.existsSync(path.join(dir, dot_gsync))
-    };
-    const inSubRepo=(dir:FilePath):boolean=>{
-      for(;
-        path.normalize(workDir)!==path.normalize(dir);
-        dir=asFilePath(path.dirname(dir))) {
-        if (isSubRepo(dir))return true;
+    return (this.realGitRepoIsSubRepo() && fs.existsSync(path.join(dir, ".git"))) || 
+          fs.existsSync(path.join(dir, dot_gsync));
+  }
+  inSubRepo(_path:FilePath):boolean {
+    if (!this.inWorkingDir(_path)) return false;
+    const workDir=this.workingDir();
+    for(;
+        path.normalize(workDir)!==path.normalize(_path);
+        _path=asFilePath(path.dirname(_path))) {
+        if (this.isSubRepo(_path))return true;
       }
       return false;     
-    };
-
+  }
+  async applyDiff(diffs: TreeDiffEntry[]): Promise<void> {
+    const workDir = this.workingDir();
     for (const diff of diffs) {
       const filePath = path.join(workDir, diff.path);
-      if (inSubRepo(asFilePath(path.dirname(filePath))))continue;
+      if (this.inSubRepo(asFilePath(path.dirname(filePath))))continue;
       if (diff.type === 'deleted') {
         await fs.promises.rm(filePath, { force: true });
       } else if (diff.type === 'added' || diff.type === 'modified') {
