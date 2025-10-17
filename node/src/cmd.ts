@@ -41,8 +41,40 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
             return await catFile(cwd, args[0]);
         case "manage":
             return await manage(cwd);
+        case "scan":
+            return await scan(cwd, args.includes("--id"), args.includes("--key"));
         default:
             throw new Error(`Unknown command: ${command}`);
+    }
+}
+export async function scan(cwd:string, showRepo:boolean, showKey:boolean){
+    const name=GIT_DIR_NAME;
+    // scan recursively *cwd* and list folder named *name*
+    function scanDir(dir:string) {
+        let results:string[]=[];
+        const files=fs.readdirSync(dir);
+        for (let f of files) {
+            const fullpath=path.join(dir,f);
+            if (fs.statSync(fullpath).isDirectory()) {
+                if (f===name) {
+                    results.push(dir);
+                } else {
+                    results=results.concat(scanDir(fullpath));
+                }
+            }
+        }
+        return results;
+    }
+    for (let d of scanDir(cwd)){
+        const field=[d];
+        if (showKey || showRepo) {
+            const repo=new Repo(asFilePath(path.join(d, GIT_DIR_NAME)));
+            const sync=new Sync(repo.gitDir);
+            const conf=await sync.readConfig();
+            if (showRepo) field.push(conf.repoId);
+            if (showKey) field.push(conf.apiKey);
+        }
+        console.log(...field);
     }
 }
 export async function manage(cwd:string, gitDirName=GIT_DIR_NAME) {
