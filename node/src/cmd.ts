@@ -1,5 +1,5 @@
 import * as path from "path";
-import { Repo, stripCR } from "./git.js";
+import { Repo, sameExceptCRLF } from "./git.js";
 import { GIT_DIR_NAME, Sync } from "./sync.js";
 import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, SyncStatusExceptAutoMerged, CloneOptions } from "./types.js";
 import * as fs from "fs";
@@ -13,6 +13,7 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
     switch (command) {
         case "clone":
         case "clone_overwrite":
+        case "clone_nocheckout":
             if (args.length<2) {
                 console.log(argv.join(" ")+" <serverUrl> <repoId>");
                 return;
@@ -20,6 +21,8 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
             const b=args[2]||"main";
             if (command==="clone") {
                 return await clone(cwd, args[0], args[1],b);
+            } else if(command==="clone_nocheckout") {
+                return await clone(cwd, args[0], args[1],b, {gitDirName:GIT_DIR_NAME, allowNonEmpty:"skipCheckout"});
             } else {
                 return await clone(cwd, args[0], args[1],b, {gitDirName:GIT_DIR_NAME, allowNonEmpty:"overwrite"});
             }
@@ -247,7 +250,7 @@ export async function sync(dir: string):Promise<SyncStatus> {
             const oldPath = repo.toFilePath(c.path);
             const oldContent = fs.readFileSync(oldPath);
             const newPath = makePostfix(oldPath, postfix);
-            if (isConflicting(oldContent, obj.content)) {
+            if (!sameExceptCRLF(oldContent, obj.content)) {
                 confpaths.push(repo.toPathInRepo(newPath));
                 if (confpaths.length==1) console.log("CONFLICT");
                 console.log(`Conflict saved at ${newPath}`);
@@ -265,13 +268,6 @@ export async function sync(dir: string):Promise<SyncStatus> {
             return "auto_merged"; 
         }
     }
-}
-function isConflicting(a:Buffer, b:Buffer) {
-    const sa=stripCR(a);
-    const sb=stripCR(b);
-    if (sa.byteLength!==sb.byteLength) return true;
-    for (let i=0;i<sa.byteLength;i++) if (sa[i]!==sb[i]) return true;
-    return false; 
 }
 function makePostfix<T extends string>(filepath:T, postfix:string):T {
     // ex: filepath = "/a/b/test.txt"  postfix = "(1)"

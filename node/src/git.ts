@@ -521,7 +521,7 @@ export class Repo {
   async applyDiff(diffs: TreeDiffEntry[]): Promise<void> {
     const workDir = this.workingDir();
     for (const diff of diffs) {
-      const filePath = path.join(workDir, diff.path);
+      const filePath = asFilePath(path.join(workDir, diff.path));
       if (this.inSubRepo(asFilePath(path.dirname(filePath))))continue;
       if (diff.type === 'deleted') {
         await fs.promises.rm(filePath, { force: true });
@@ -529,13 +529,18 @@ export class Repo {
         if (!diff.newHash) throw new Error(`Missing 'other' hash for ${diff.path}`);
         const { type, content } = await this.readObject(diff.newHash);
         if (type !== 'blob') throw new Error(`Expected blob, got ${type} for ${diff.path}`);
-
-        // 必要ならディレクトリを作成
-        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-        await fs.promises.writeFile(filePath, content);
+        writeFileIgnoreingCRLF(filePath, content);
       }
     }
   }
+}
+export async function writeFileIgnoreingCRLF(filePath: FilePath, content:Buffer) {
+  if (fs.existsSync(filePath)) {
+    const org=await fs.promises.readFile(filePath); 
+    if (sameExceptCRLF(org,content)) return;
+  }
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.promises.writeFile(filePath, content);
 }
 
 export class RecursiveGitIgnore{
@@ -597,5 +602,12 @@ export function stripCR(content: Buffer<ArrayBufferLike>): Uint8Array<ArrayBuffe
   const t=isUtf8Text(content);
   if (!t) return content;
   return new TextEncoder().encode(t.replace(/\r\n/g,"\n"));
+}
+export function sameExceptCRLF(a: Buffer, b: Buffer) {
+    const sa = stripCR(a);
+    const sb = stripCR(b);
+    if (sa.byteLength !== sb.byteLength) return false;
+    for (let i = 0; i < sa.byteLength; i++) if (sa[i] !== sb[i]) return false;
+    return true;
 }
 
