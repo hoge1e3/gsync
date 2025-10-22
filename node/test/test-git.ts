@@ -1,6 +1,6 @@
 import { Author, Hash, TreeEntry, asLocalRef, asBranchName, asHash, ObjectType, FilePath, asFilePath} from "../src/types.js";
 import * as assert from "assert";
-import { RecursiveGitIgnore, Repo } from "../src/git.js";
+import { IgnoreChecker, RecursiveGitIgnore, Repo } from "../src/git.js";
 import { Sync } from "../src/sync.js";
 import { clone, commit, log, sync } from "../src/cmd.js";
 import { sha1Hex } from "../src/codec.js";
@@ -10,11 +10,83 @@ const localRef_main = asLocalRef(branch_main);
 import * as path from "path";
 import * as fs from "fs";
 import { FileBasedObjectStore, ObjectEntry } from "../src/objects.js";
+export async function testIgnoreCheckerAtRandom() {
+    const repo=new Repo(asFilePath(("../.gsync")));
+    const igc=new IgnoreChecker(repo);
+    const allfiles=new Set<FilePath>();
+    const walk=(dir:FilePath)=>{
+        //console.log("ig",ig);
+        const files = fs.readdirSync(dir, { withFileTypes: true });
+        for (const file of files) {
+            const fullPath = asFilePath(path.join(dir, file.name));
+            /*if (igc.ignores(fullPath)) {
+                console.log("Ignores" ,fullPath);
+                continue;
+            }
+            if (file.name==="node_modules"||file.name===".git") {
+                //console.log(ig.stack);
+                throw new Error("node!!  .git!! "+fullPath);
+            }*/
+            if (fs.statSync(fullPath).isDirectory()){
+                walk(fullPath);
+            } else {
+                allfiles.add(fullPath);
+                //console.log(fullPath);
+            }
+        }
+    };
+    walk(repo.workingDir());
+    const shuffled=[...allfiles].sort(()=>Math.random()-0.5);
+    let ct=0,cf=0;
+    for (let s of shuffled) {
+        const ib=igc.ignores(s);
+        if (ib) {
+            if (ct<25) {
+                ct++;
+                console.log(s, ib);
+            }
+        } else {
+            if (cf<25) {
+                cf++;
+                console.log(s, ib);
+            }
+        }
+    }
+    return;
+
+}
+
+export async function testIgnoreChecker() {
+    const repo=new Repo(asFilePath(("../.gsync")));
+    const igc=new IgnoreChecker(repo);
+    const walk=(dir:FilePath)=>{
+        //console.log("ig",ig);
+        const files = fs.readdirSync(dir, { withFileTypes: true });
+        for (const file of files) {
+            const fullPath = asFilePath(path.join(dir, file.name));
+            if (igc.ignores(fullPath)) {
+                console.log("Ignores" ,fullPath);
+                continue;
+            }
+            if (file.name==="node_modules"||file.name===".git") {
+                //console.log(ig.stack);
+                throw new Error("node!!  .git!! "+fullPath);
+            }
+            if (fs.statSync(fullPath).isDirectory()){
+                walk(fullPath);
+            } else {
+                console.log(fullPath);
+            }
+        }
+    };
+    walk(repo.workingDir());
+    return;
+}
 export async function testHash2(){
     const repo=new Repo(asFilePath("../.gsync"));
-    const ig=new RecursiveGitIgnore();
+    let ig=new RecursiveGitIgnore();
     const walk=(dir:FilePath)=>{
-        ig.push(dir);
+        ig=ig.pushed(dir);
         //console.log("ig",ig);
         const files = fs.readdirSync(dir, { withFileTypes: true });
         for (const file of files) {
@@ -33,7 +105,7 @@ export async function testHash2(){
                 console.log(fullPath);
             }
         }
-        ig.pop();
+        ig=ig.poped();
     };
     walk(asFilePath(path.dirname(repo.gitDir)));
     return;
@@ -184,9 +256,11 @@ async function testObjectStore(){
     }
 }
 async function main() {
-    await testObjectStore();
+    //await testObjectStore();
     //await test_clone();
-    //await testHash2();
+    await testHash2();
+    await testIgnoreChecker();
+    await testIgnoreCheckerAtRandom();
     //await test_sync();
     //await test_clone("clonetes2");
     //await test_commit("clonetes2");

@@ -1,6 +1,7 @@
 // @acepad/git
 import * as fs from 'fs';
 import * as path from 'path';
+import * as path_typed from "./path_typed.js";
 /*import zlib from 'zlib';
 import crypto from 'crypto';*/
 import ignore from 'ignore';
@@ -144,13 +145,13 @@ export class Repo {
 
   async buildTreeFromWorkingDir(): Promise<TreeEntry[]> {
     const workingDir = this.workingDir();
-    const ig = new RecursiveGitIgnore();
+    let ig = new RecursiveGitIgnore();
     const dot_gsync=path.basename(this.gitDir);
     const baseig=ignore();
     baseig.add(".git");
     baseig.add(dot_gsync);
     const walk = async (dir: FilePath): Promise<TreeEntry[]> => {
-      ig.push(dir);
+      ig=ig.pushed(dir);
       try {
         const entries: TreeEntry[] = [];
         const files = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -186,7 +187,7 @@ export class Repo {
         }
         return entries;
       } finally{
-        ig.pop();
+        ig=ig.poped();
       }
     };
 
@@ -347,11 +348,14 @@ export class Repo {
     const newMap = new Map(newTree.map(e => [e.name, e]));
 
     const names = new Set([...oldMap.keys(), ...newMap.keys()]);
+    const igc=new IgnoreChecker(this);
 
     for (const name of names) {
       const oldEnt = oldMap.get(name);
       const newEnt = newMap.get(name);
       const relPath = asPathInRepo(path.posix.join(prefix, name));
+      const fullPath = path_typed.join(this.workingDir(), relPath);
+      if (igc.ignores(fullPath)) continue;
 
       if (oldEnt && !newEnt) {
         // 削除
@@ -520,8 +524,10 @@ export class Repo {
   }
   async applyDiff(diffs: TreeDiffEntry[]): Promise<void> {
     const workDir = this.workingDir();
+    const igc=new IgnoreChecker(this);
     for (const diff of diffs) {
       const filePath = asFilePath(path.join(workDir, diff.path));
+      if (igc.ignores(filePath)) continue;
       if (this.inSubRepo(asFilePath(path.dirname(filePath))))continue;
       if (diff.type === 'deleted') {
         await fs.promises.rm(filePath, { force: true });
@@ -542,12 +548,42 @@ export async function writeFileIgnoreingCRLF(filePath: FilePath, content:Buffer)
   await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
   await fs.promises.writeFile(filePath, content);
 }
+export class IgnoreChecker {
+  igs=new Map<FilePath, RecursiveGitIgnore>;
+  baseig: ignore.Ignore;
+  constructor(public repo:Repo) {
+    const workingDir = repo.workingDir();
+    this.igs.set(workingDir,new RecursiveGitIgnore().pushed(workingDir));
+    const dot_gsync=path.basename(repo.gitDir);
+    this.baseig=ignore();
+    this.baseig.add(".git");
+    this.baseig.add(dot_gsync);
+  }
+  get(dir:FilePath):RecursiveGitIgnore {
+    if (!this.repo.inWorkingDir(dir)) throw new Error(`${dir} is out of working dir ${this.repo.workingDir()}`);
+    if (this.igs.has(dir)) {
+      return this.igs.get(dir)!;
+    }
+    const parent=path_typed.dirname(dir);
+    const r=this.get(parent).pushed(dir);
+    this.igs.set(dir,r);
+    return r;
+  }
+  ignores(file:FilePath):boolean{
+    const rel=path.relative(this.repo.workingDir(), file);
+    if (this.baseig.ignores(rel)) return true;
+    const dir=path_typed.dirname(file);
+    const ig=this.get(dir); 
+    return ig.ignores(file);
+  }
+}
 
-export class RecursiveGitIgnore{
-  stack=[] as {
+type IgnoreStack={
     dir:FilePath,
     ig:ignore.Ignore;
-  }[];
+};
+export class RecursiveGitIgnore{
+  constructor (public stack:ReadonlyArray<IgnoreStack>=[]) {}
   ignores(file:FilePath):boolean{
     for (const {ig, dir} of this.stack) {
       if (file.startsWith(dir)) {
@@ -558,7 +594,7 @@ export class RecursiveGitIgnore{
     }
     return false; // デフォルトは無視しない
   }
-  push(dir:FilePath){
+  pushed(dir:FilePath):RecursiveGitIgnore{
     const ig=ignore();
     // .gitignore を読み込む（存在する場合）
     const gitignorePath = path.join(dir, '.gitignore');
@@ -568,10 +604,12 @@ export class RecursiveGitIgnore{
     } catch {
       // .gitignore がない場合は無視
     }
-    this.stack.push({ig, dir});
+    return new RecursiveGitIgnore([...this.stack, {ig,dir}]);
+    //this.stack.push({ig, dir});
   }
-  pop(){
-    this.stack.pop();
+  poped():RecursiveGitIgnore{
+    return new RecursiveGitIgnore(this.stack.slice(0,this.stack.length-1));
+    //this.stack.pop();
   }
 }
 
