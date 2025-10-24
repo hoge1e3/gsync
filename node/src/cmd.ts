@@ -42,6 +42,8 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
             return await log(cwd);
         case "cat-file":
             return await catFile(cwd, args[0]);
+        case "download-objects":
+            return await downloadObjects(cwd);
         case "manage":
             return await manage(cwd);
         case "scan":
@@ -190,6 +192,11 @@ export async function syncWithRetry(dir: string): Promise<SyncStatusExceptAutoMe
         if (r!=="auto_merged") return r;
     }
     throw new Error("Auto-merge repeated 5 times. Aborted.");
+}
+export async function downloadObjects(dir:string) {
+    const gitDir = findGitDir(asFilePath(dir));
+    const sync=new Sync(gitDir);
+    await sync.downloadObjects();
 }
 export async function sync(dir: string):Promise<SyncStatus> {
 
