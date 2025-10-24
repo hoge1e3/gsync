@@ -1,0 +1,6 @@
+{
+    "scripts": {
+        "build": "cd node && npx tsc",
+        "test": "cd node && npm run test"
+    }
+}
