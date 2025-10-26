@@ -47,12 +47,19 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
         case "manage":
             return await manage(cwd);
         case "scan":
-            return await scan(cwd, args.includes("--id"), args.includes("--url"), args.includes("--key"));
+            return await scan(cwd, 
+            args.includes("--id"), 
+            args.includes("--url"), 
+            args.includes("--key"),
+            args.includes("--shell"),
+            );
         default:
             throw new Error(`Unknown command: ${command}`);
     }
 }
-export async function scan(cwd:string, showRepo:boolean, showUrl:boolean, showKey:boolean){
+export async function scan(cwd:string, 
+showRepo:boolean, showUrl:boolean, 
+showKey:boolean,shell:boolean){
     const name=GIT_DIR_NAME;
     // scan recursively *cwd* and list folder named *name*
     function scanDir(dir:string) {
@@ -71,6 +78,10 @@ export async function scan(cwd:string, showRepo:boolean, showUrl:boolean, showKe
         return results;
     }
     for (let d of scanDir(cwd)){
+      if(shell){
+        console.log("cd",d,";gsync");
+        continue;
+      }
         const field=[d];
         if (showKey || showRepo || showUrl) {
             const repo=new Repo(asFilePath(path.join(d, GIT_DIR_NAME)));
