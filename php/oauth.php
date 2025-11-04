@@ -31,6 +31,9 @@ class MySession {
 }
 class OAuthController {
     static function start() {
+      if(isset($_GET["code"])){
+        return self::login();
+      }
         //--------------------------------------
         // 認証ページにリダイレクト
         //--------------------------------------
