@@ -37,7 +37,7 @@ if ($repoId === '') {
     Read <a target="eula" href="eula.html">Terms of use</a> first.
     <hr/>
     <?php 
-    login_form($repoID); 
+    login_form($repoId); 
     new_password_form($repoId);
     exit;
 }

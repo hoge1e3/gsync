@@ -11,25 +11,29 @@ define('CALLBACK_URL', 'http://localhost/oauth.php');
 // add CALLBACK_URL to authroized url
 */
 class MySession {
-    static start() {
+    static $started=false;
+    static function start() {
         if (self::$started) return;
         session_start();
         self::$started=true;
     }
-    static get($name,$def=null) {
+    static function get($name,$def=null) {
         self::start();
         if (isset($_SESSION[$name])) {
-            return $_SESSION[$name]);
+            return $_SESSION[$name];
         }
         return $def;
     }
-    static set($name,$value) {
+    static function set($name,$value) {
         self::start();
         $_SESSION[$name]=$value;
     }
 }
 class OAuthController {
     static function start() {
+      if(isset($_GET["code"])){
+        return self::login();
+      }
         //--------------------------------------
         // 認証ページにリダイレクト
         //--------------------------------------
@@ -113,17 +117,20 @@ class OAuthController {
         header("Location: oauth.php?action=select");
     }
     static function select() {
-        $id=getID(MySession::get("oauthed_id"));
+        $id=(MySession::get("oauthed_id"));
         echo $id;
     }
     
     static function header() {
-        echo "<a href='.'>Top</a><hr>";
+        //echo "<a href='.'>Top</a><hr>";
     }
 }
 function endsWith($haystack, $needle) {
     return (strlen($haystack) > strlen($needle)) ? (substr($haystack, -strlen($needle)) == $needle) : false;
 }
 if (isset($_GET["action"])) {
-    
+    $a=$_GET["action"];
+    OAuthController::$a();   
+} else {
+    OAuthController::start();
 }
