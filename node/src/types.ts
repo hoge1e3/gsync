@@ -9,8 +9,10 @@ export type State = {
     downloadSince: number,
     uploadSince: number,
 };
+export type SyncStatus="auto_merged"|"no_changes"|"newly_pushed"|"pushed"|"pulled"|Conflicted;
+/*export type SyncStatusExceptAutoMerged=;
 export type SyncStatus="auto_merged"|SyncStatusExceptAutoMerged;
-export type SyncStatusExceptAutoMerged="no_changes"|"newly_pushed"|"pushed"|"pulled"|Conflicted;
+export type SyncStatusExceptAutoMerged="no_changes"|"newly_pushed"|"pushed"|"pulled"|Conflicted;*/
 export type Conflicted=PathInRepo[];
 export type CloneOptions={
   gitDirName: string,
@@ -94,6 +96,8 @@ export function asLocalRef(s:BranchName):Ref {
 }
 export type Ref=string&{[SymRef]:undefined};
 
+export type ConflictResolutionPolicy= 
+  "saveHashedRemote" | /*"saveHashedLocal" |*/ "ignoreLocal" | "ignoreRemote" |"newer";
 export type Conflict = { path: PathInRepo; base?: Hash; a: Hash; b: Hash };
 export type ObjectType = "commit" | "tree" | "blob" | "tag";
 export function isObjectType(type: string): type is ObjectType {

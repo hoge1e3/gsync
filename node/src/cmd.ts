@@ -1,7 +1,7 @@
 import * as path from "path";
 import { Repo, sameExceptCRLF } from "./git.js";
 import { GIT_DIR_NAME, Sync } from "./sync.js";
-import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, SyncStatusExceptAutoMerged, CloneOptions } from "./types.js";
+import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, CloneOptions, ConflictResolutionPolicy } from "./types.js";
 import * as fs from "fs";
 
 export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
@@ -37,7 +37,9 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
             return await commit(cwd);
         case "sync":
         case undefined:
-            return await syncWithRetry(cwd);
+            return await syncWithRetry(cwd, "saveHashedRemote");
+        case "newer":
+            return await syncWithRetry(cwd, "newer");
         case "log":
             return await log(cwd);
         case "cat-file":
@@ -197,10 +199,17 @@ export async function commit(dir: string):Promise<Hash> {
     await repo.updateHead(ref, newCommitHash);
     return newCommitHash;
 }
-export async function syncWithRetry(dir: string): Promise<SyncStatusExceptAutoMerged> {
+export async function syncWithRetry(dir: string, 
+    conflictResolutionPolicy:ConflictResolutionPolicy): Promise<SyncStatus> {
+    const res=[];
     for(let i=0;i<5;i++) {
-        let r=await sync(dir);
-        if (r!=="auto_merged") return r;
+        let r=await sync(dir, conflictResolutionPolicy);
+        res.push(r);
+        if (r!=="auto_merged") {
+            // auto_merged->pushed
+            if(res.includes("auto_merged")) return "auto_merged"; 
+            else return r;
+        }
     }
     throw new Error("Auto-merge repeated 5 times. Aborted.");
 }
@@ -209,7 +218,8 @@ export async function downloadObjects(dir:string) {
     const sync=new Sync(gitDir);
     await sync.downloadObjects();
 }
-export async function sync(dir: string):Promise<SyncStatus> {
+export async function sync(dir: string, 
+    conflictResolutionPolicy:ConflictResolutionPolicy):Promise<SyncStatus> {
 
     const localCommitHash=await commit(dir);
     const gitDir = findGitDir(asFilePath(dir));
@@ -239,6 +249,7 @@ export async function sync(dir: string):Promise<SyncStatus> {
     }
     const localCommit=await repo.readCommit(localCommitHash);
     const remoteCommit=await repo.readCommit(remoteCommitHash);
+    const remoteCommitTime=remoteCommit.author.date;
     const localTree=await repo.readTree(localCommit.tree);
     const remoteTree=await repo.readTree(remoteCommit.tree);
     if (localCommitHash===baseCommitHash) {
@@ -263,16 +274,30 @@ export async function sync(dir: string):Promise<SyncStatus> {
     } else {
         let confpaths:Conflicted=[];
         for (let c of conflicts) {
-            const obj=await repo.readObject(c.b);
-            const postfix=`(${remoteCommitHash.substring(0,8)})`;
-            const oldPath = repo.toFilePath(c.path);
-            const oldContent = fs.readFileSync(oldPath);
-            const newPath = makePostfix(oldPath, postfix);
-            if (!sameExceptCRLF(oldContent, obj.content)) {
-                confpaths.push(repo.toPathInRepo(newPath));
-                if (confpaths.length==1) console.log("CONFLICT");
-                console.log(`Conflict saved at ${newPath}`);
-                fs.writeFileSync(newPath, obj.content);
+            const remoteObj=await repo.readObject(c.b);
+            const localPath = repo.toFilePath(c.path);
+            const localContent = fs.readFileSync(localPath);
+            if (!sameExceptCRLF(localContent, remoteObj.content)) {
+                const winner = 
+                    conflictResolutionPolicy==="ignoreLocal"? "remote":
+                    conflictResolutionPolicy==="ignoreRemote"? "local":
+                    conflictResolutionPolicy==="newer"?
+                        (remoteCommitTime.getTime()>
+                        fs.statSync(localPath).mtime.getTime()?"remote":"local"):
+                    null;
+                if (winner===null) {
+                    const postfix=`(${remoteCommitHash.substring(0,8)})`;
+                    const postfixedPath = makePostfix(localPath, postfix);
+                    confpaths.push(repo.toPathInRepo(postfixedPath));
+                    if (confpaths.length==1) console.log("CONFLICT");
+                    console.log(`Conflict saved at ${postfixedPath}`);
+                    fs.writeFileSync(postfixedPath, remoteObj.content);
+                } else if (winner==="remote") {
+                    console.log(`Overwrite ${localPath}`); 
+                    fs.writeFileSync(localPath, remoteObj.content);
+                } else {
+                    console.log(`Skip ${localPath}`); 
+                }
             }
         }
         if (confpaths.length>0) {

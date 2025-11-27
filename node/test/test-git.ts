@@ -215,7 +215,7 @@ async function test_commit(name="clonetes") {
     await commit("js/test/fixture/"+name);
 }
 async function test_sync(name="clonetes") {
-    await sync("js/test/fixture/"+name);
+    await sync("js/test/fixture/"+name, "saveHashedRemote");
 }
 async function testObjectStore(){
     const since1=new Date();
