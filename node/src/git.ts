@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as path_typed from "./path_typed.js";
 /*import zlib from 'zlib';
 import crypto from 'crypto';*/
-import ignore from 'ignore';
+import ignore, { Ignore } from 'ignore';
 //import { promisify } from 'util';
 import { asFilename, asHash, asMode, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef, PathInRepo, FilePath, asFilePath, asPathInRepo } from './types.js';
 import { inflate, deflate ,sha1Hex } from './codec.js';
@@ -550,7 +550,7 @@ export async function writeFileIgnoreingCRLF(filePath: FilePath, content:Buffer)
 }
 export class IgnoreChecker {
   igs=new Map<FilePath, RecursiveGitIgnore>;
-  baseig: ignore.Ignore;
+  baseig: Ignore;
   constructor(public repo:Repo) {
     const workingDir = repo.workingDir();
     this.igs.set(workingDir,new RecursiveGitIgnore().pushed(workingDir));
@@ -580,7 +580,7 @@ export class IgnoreChecker {
 
 type IgnoreStack={
     dir:FilePath,
-    ig:ignore.Ignore;
+    ig:Ignore;
 };
 export class RecursiveGitIgnore{
   constructor (public stack:ReadonlyArray<IgnoreStack>=[]) {}
