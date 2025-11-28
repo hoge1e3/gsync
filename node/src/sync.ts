@@ -118,7 +118,7 @@ export class Sync {
     }
 
 
-    async downloadObjects(): Promise<void> {
+    async downloadObjects(ignoreState=false): Promise<void> {
         const config = await this.readConfig();
         const state = await this.readState();
         //const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
@@ -126,7 +126,7 @@ export class Sync {
         const res = await postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
             api_key: config.apiKey,
-            since: state.downloadSince,
+            since: ignoreState ? 0:state.downloadSince,
         });
 
         const objects: { hash: Hash; content: string }[] = res.data.objects;

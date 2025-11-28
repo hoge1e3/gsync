@@ -216,7 +216,7 @@ export async function syncWithRetry(dir: string,
 export async function downloadObjects(dir:string) {
     const gitDir = findGitDir(asFilePath(dir));
     const sync=new Sync(gitDir);
-    await sync.downloadObjects();
+    await sync.downloadObjects(true);
 }
 export async function sync(dir: string, 
     conflictResolutionPolicy:ConflictResolutionPolicy):Promise<SyncStatus> {

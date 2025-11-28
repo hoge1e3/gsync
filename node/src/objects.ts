@@ -69,7 +69,7 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
                     const value:ObjectValue=request.result;
                     resolve(value);
                 } else {
-                    reject(new Error(`Object ${hash} not found`));
+                    reject(new Error(`Object ${hash} not found. Consider run: gsync download-objects `));
                 }
             };
             request.onerror = () => reject(request.error);
