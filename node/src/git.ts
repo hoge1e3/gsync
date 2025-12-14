@@ -527,6 +527,9 @@ export class Repo {
     const igc=new IgnoreChecker(this);
     for (const diff of diffs) {
       const filePath = asFilePath(path.join(workDir, diff.path));
+      if (await this.hasSymlinkInPath(filePath)) {
+        continue;
+      }
       if (igc.ignores(filePath)) continue;
       if (this.inSubRepo(asFilePath(path.dirname(filePath))))continue;
       if (diff.type === 'deleted') {
@@ -538,6 +541,27 @@ export class Repo {
         writeFileIgnoreingCRLF(filePath, content);
       }
     }
+  }
+  
+  async hasSymlinkInPath(targetPath: FilePath): Promise<boolean> {
+    const rel = path.relative(this.workingDir(), targetPath);
+    const parts = rel.split(path.sep);
+    let current = this.workingDir();
+    for (const part of parts) {
+      if (!part) continue;
+      if (part=="..")throw new Error(`${rel}(${targetPath}) is out of this repo.`);
+      current = asFilePath(path.join(current, part));
+      try {
+        const stat = await fs.promises.lstat(current);
+        if (stat.isSymbolicLink()) {
+          return true;
+        }
+      } catch (e) {
+        // 存在しないパスの場合は「ない」と判断
+        return false;
+      }
+    }
+    return false;
   }
 }
 export async function writeFileIgnoreingCRLF(filePath: FilePath, content:Buffer) {
@@ -648,4 +672,3 @@ export function sameExceptCRLF(a: Buffer, b: Buffer) {
     for (let i = 0; i < sa.byteLength; i++) if (sa[i] !== sb[i]) return false;
     return true;
 }
-
