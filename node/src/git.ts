@@ -171,7 +171,7 @@ export class Repo {
           //const fullPath = asPath( path.join(dir, name) );
           //const stat = await fs.promises.stat(fullPath);
 
-          if (file.isFile()) {
+          if (file.isFile()) { // false for symlink
             const _content = await fs.promises.readFile(fullPath);
             const content = stripCR(_content);
             const hash = await this.writeObject('blob', content);
