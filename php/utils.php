@@ -10,7 +10,10 @@ function createRepo(): string {
 
     mkdir("$repo_path/objects", 0777, true);
     mkdir("$repo_path/refs/heads", 0777, true);
-
+    if (defined("ADMIN_DIR")){
+        $repoAdminDir = ADMIN_DIR . '/' . $repo_id;
+        mkdir($repoAdminDir, 0777,true);
+    }
     return $repo_id;
 }
 function repoPath($repo_id):string{
@@ -146,6 +149,9 @@ function setHead(array $data): string {
     return "ok";
 }
 function parseJson($str) {
+    if (strlen($str)===0) {
+        throw new Exception("Empty json");
+    } 
     $r=json_decode($str, true);
     if ($r===null) {
         throw new Exception("Cannot parse json: $str");
