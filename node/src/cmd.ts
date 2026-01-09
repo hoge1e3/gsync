@@ -103,7 +103,10 @@ export async function manage(cwd:string, gitDirName=GIT_DIR_NAME) {
     const conf=await sync.readConfig();
     const repoId=conf.repoId;
     const url=conf.serverUrl;
-    const manage=url.replace(/\w+.php$/,"manage.php");
+    const manage=
+        url.match  (/\w+.php$/)?
+        url.replace(/\w+.php$/,"manage.php"):
+        url+"manage.php";
     console.log(`Open ${manage}?repo=${repoId}`);
 }
 export async function catFile(dir: string, hash: string ) {
@@ -121,7 +124,7 @@ export async function catFile(dir: string, hash: string ) {
 export async function init(cwd: string, serverUrl: string, gitDirName=GIT_DIR_NAME) {
     const dir=path.join(cwd, gitDirName);
     if (!serverUrl.endsWith(".php") && !serverUrl.endsWith("/")){
-        console.warn(`${serverUrl} should be ends with .php or / `);
+        console.warn(`WARNING! ${serverUrl} should be ends with .php or / `);
     }
     const gitDir=asFilePath(dir);
     const sync=new Sync(gitDir);

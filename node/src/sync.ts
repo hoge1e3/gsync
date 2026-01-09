@@ -4,7 +4,6 @@ import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config } from './
 import { factory, ObjectStore } from './objects.js';
 import { REMOTE_CONF_FILE, REMOTE_STATE_FILE } from './constants.js';
 
-
 export const GIT_DIR_NAME=".gsync";
 export async function postJson(url:string, data={}){
     const response=await fetch(url, {method:"POST", body:JSON.stringify(data)});
