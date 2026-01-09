@@ -59,9 +59,21 @@ if (!is_array($apikeys)) $apikeys = [];
 
 // Step 1: Setup password if not set yet
 if (!file_exists($passwordFile)) {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_password'])) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' 
+    && isset($_POST['new_password'])
+    && isset($_POST['confirm_password'])) {
+        if ($_POST['new_password']!==$_POST['confirm_password']) {
+            ?>
+            Password not match.
+            <a href="javascript:history.back()">Retry</a>
+            <?php
+            exit;
+        }
         file_put_contents($passwordFile, password_hash($_POST['new_password'], PASSWORD_DEFAULT));
-        echo "Admin password set. <a href=\"?repo=" . htmlspecialchars($repoId) . "\">Login</a>";
+        ?>
+        Admin password set. 
+        <a href="?repo=<?= htmlspecialchars($repoId) ?>">Login</a>
+        <?php
         exit;
     }
 
@@ -69,7 +81,8 @@ if (!file_exists($passwordFile)) {
     <h1>Set Admin Password for Repository: <?=htmlspecialchars($repoId)?></h1>
     <form method="post">
         <input type="hidden" name="repo" value="<?= htmlspecialchars($repoId)?>"/>
-        <label>New Password: <input type="password" name="new_password"></label>
+        <label style="display:block;">New Password: <input type="password" name="new_password"></label>
+        <label style="display:block;">Confirm Pass: <input type="password" name="confirm_password"></label>
         <button type="submit">Set Password</button>
         <div><strong>Caution!</strong> Password can NOT be changed / reset.</div>
     </form>
