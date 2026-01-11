@@ -1,7 +1,7 @@
 import * as path from "path";
 import { Repo, sameExceptCRLF } from "./git.js";
 import { GIT_DIR_NAME, Sync } from "./sync.js";
-import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, CloneOptions, ConflictResolutionPolicy } from "./types.js";
+import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, CloneOptions, ConflictResolutionPolicy, IgnoreState } from "./types.js";
 import * as fs from "fs";
 
 export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
@@ -45,7 +45,7 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
         case "cat-file":
             return await catFile(cwd, args[0]);
         case "download-objects":
-            return await downloadObjects(cwd);
+            return await downloadObjects(cwd, args.includes("-a")?"all":"max_mtime");
         case "manage":
             return await manage(cwd);
         case "scan":
@@ -216,10 +216,10 @@ export async function syncWithRetry(dir: string,
     }
     throw new Error("Auto-merge repeated 5 times. Aborted.");
 }
-export async function downloadObjects(dir:string) {
+export async function downloadObjects(dir:string, ignoreState:IgnoreState) {
     const gitDir = findGitDir(asFilePath(dir));
     const sync=new Sync(gitDir);
-    await sync.downloadObjects(true);
+    await sync.downloadObjects(ignoreState);
 }
 export async function sync(dir: string, 
     conflictResolutionPolicy:ConflictResolutionPolicy):Promise<SyncStatus> {

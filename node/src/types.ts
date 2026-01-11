@@ -9,6 +9,10 @@ export type State = {
     downloadSince: number,
     uploadSince: number,
 };
+export type IgnoreState=
+  "none"|/* do not ignore */
+  "max_mtime"|/* use maxMtime */
+  "all"; /* from new Date(0) */
 export type SyncStatus="auto_merged"|"no_changes"|"newly_pushed"|"pushed"|"pulled"|Conflicted;
 /*export type SyncStatusExceptAutoMerged=;
 export type SyncStatus="auto_merged"|SyncStatusExceptAutoMerged;

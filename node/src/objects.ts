@@ -26,6 +26,13 @@ export async function factory(gitDir:FilePath):Promise<ObjectStore>{
         return new FileBasedObjectStore(objdir);   
     }
 }
+export async function maxMtime(o:ObjectStore) {
+    let max=new Date(0);
+    for await(let e of o.iterate(new Date(0))) {
+        if (e.mtime>max) max=e.mtime;
+    }
+    return max;
+}
 export class IndexedDBBasedObjectStore implements ObjectStore {
     private db: IDBDatabase | null = null;
     dbInit=new MutablePromise<IDBDatabase>();

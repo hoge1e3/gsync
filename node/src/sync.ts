@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config } from './types.js';
-import { factory, ObjectStore } from './objects.js';
+import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config, IgnoreState } from './types.js';
+import { factory, maxMtime, ObjectStore } from './objects.js';
 import { REMOTE_CONF_FILE, REMOTE_STATE_FILE } from './constants.js';
 
 export const GIT_DIR_NAME=".gsync";
@@ -117,7 +117,7 @@ export class Sync {
     }
 
 
-    async downloadObjects(ignoreState=false): Promise<void> {
+    async downloadObjects(ignoreState:IgnoreState="none"): Promise<void> {
         const config = await this.readConfig();
         const state = await this.readState();
         //const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
@@ -125,7 +125,9 @@ export class Sync {
         const res = await postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
             api_key: config.apiKey,
-            since: ignoreState ? 0:state.downloadSince,
+            since: ignoreState==="all" ? 0:
+                ignoreState==="max_mtime" ? await maxMtime(await this.getObjectStore()):
+                state.downloadSince,
         });
 
         const objects: { hash: Hash; content: string }[] = res.data.objects;
