@@ -4,7 +4,7 @@ import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config, IgnoreSta
 import { factory, maxMtime, ObjectStore,ObjectEntry } from './objects.js';
 import { REMOTE_CONF_FILE, REMOTE_STATE_FILE } from './constants.js';
 import { dateToPhpTimestamp, phpTimestampToDate, toBase64 } from './util.js';
-import { PHPClient, WebServerApi } from './server.js';
+import { PHPClient, WebServerApi } from './webapi.js';
 
 export const GIT_DIR_NAME=".gsync";
 /*export async function postJson(url:string, data={}){
@@ -38,7 +38,7 @@ export class Sync {
             config.serverUrl,
             config.repoId,
             config.apiKey,
-            await this.getObjectStore(),
+            //await this.getObjectStore(),
         );
         return this._webapi;
     }
@@ -51,7 +51,7 @@ export class Sync {
             serverUrl, 
             "init",
             apiKey,
-            await this.getObjectStore(),
+            //await this.getObjectStore(),
         );
         // invoke create command (see /php/index.php)
         // and return new repository id
@@ -146,7 +146,7 @@ export class Sync {
         const since=  ignoreState==="all" ? new Date(0):
               ignoreState==="max_mtime" ? await maxMtime(await this.getObjectStore()):
               phpTimestampToDate(state.downloadSince);
-        const newest = await api.downloadObjects(since/*postJson(`${config.serverUrl}?action=download`, {
+        const {newest,objects} = await api.downloadObjects(since/*postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
             api_key: config.apiKey,
             since,
@@ -154,7 +154,7 @@ export class Sync {
 
         //const objects: { hash: Hash; content: string }[] = res.data.objects;
         const newDownloadSince = dateToPhpTimestamp(newest);
-        /*const objectStore=await this.getObjectStore();
+        const objectStore=await this.getObjectStore();
         let downloaded=0, skipped=0;
         for (const { hash, content } of objects) {
             asHash(hash);
@@ -162,13 +162,13 @@ export class Sync {
             if (await objectStore.has(hash)) {
                 skipped++;
             } else {
-                const binary = Buffer.from(content, 'base64');
-                await objectStore.put(hash,  binary);
+                //const binary = Buffer.from(content, 'base64');
+                await objectStore.put(hash,  content);
             }
         }
         console.log(downloaded," objects downloaded. ",skipped," objects skipped.");
-        */
-       await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
+        
+        await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
     }
     async hasRemoteHead(branch: BranchName):Promise<boolean> {

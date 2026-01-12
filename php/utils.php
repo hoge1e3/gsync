@@ -92,6 +92,7 @@ function downloadObjects(array $data): array {
                 $result[] = [
                     'hash' => $hash,
                     'content' => $base64,
+                    'mtime' => $mt,
                 ];
             }
         }

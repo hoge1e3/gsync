@@ -1,5 +1,5 @@
 import { ObjectEntry, ObjectStore } from './objects.js';
-import { asHash, BranchName, GitObject, Hash } from './types.js';
+import { asHash, BranchName, GitObject, Hash, PHPTimestamp } from './types.js';
 import { dateToPhpTimestamp, phpTimestampToDate, toBase64 } from './util.js';
 
 /**
@@ -7,23 +7,23 @@ import { dateToPhpTimestamp, phpTimestampToDate, toBase64 } from './util.js';
  */
 export interface WebServerApi {
   repoId: string;
-  objectStore: ObjectStore;
+  //objectStore: ObjectStore;
   createRepository(): Promise<{ repo_id: string }>;
   setHead(branch: BranchName, current:Hash, next: Hash): Promise<void>;
   addHead(branch: BranchName, next: Hash): Promise<void>;
   hasHead(branch: BranchName): Promise<boolean>;
   getHead(branch: BranchName): Promise<Hash>;
   uploadObjects(objects: ObjectEntry[]): Promise<Date>;
-  downloadObjects(since?: Date): Promise<Date>;
+  downloadObjects(since?: Date): Promise<{objects:ObjectEntry[],newest:Date}>;
 }
 type Actions="create"|"upload"|"download"|"get_head"|"set_head";
-type StringifiedObject={ hash: Hash; content: string };
+type StringifiedObject={ hash: Hash; content: string, mtime?:PHPTimestamp };
 export class PHPClient implements WebServerApi {
   constructor(
     public serverUrl: string,
     public repoId: string,
     public apiKey: string,
-    public objectStore: ObjectStore,
+    //public objectStore: ObjectStore,
   ) {}
 
   private async post(action: Actions, data: any) {
@@ -103,27 +103,31 @@ export class PHPClient implements WebServerApi {
     return phpTimestampToDate(data.timestamp);
   }
 
-  async downloadObjects(since:Date): Promise<Date> {
+  async downloadObjects(since:Date): Promise<{objects:ObjectEntry[],newest:Date}> {
     const res = await this.post("download", {
       repo_id: this.repoId,
       api_key: this.apiKey,
       since: dateToPhpTimestamp(since),
     });
     const sObjects=res.objects as StringifiedObject[];
+    const objects: ObjectEntry[]=[];
     const newDownloadSince = phpTimestampToDate(res.newest);
-    const objectStore=this.objectStore;
-    let downloaded=0, skipped=0;
-    for (const { hash, content } of sObjects) {
-        asHash(hash);
-        downloaded++;
+    //const objectStore=this.objectStore;
+    //let downloaded=0, skipped=0;
+    for (const { hash, content, mtime } of sObjects) {
+      asHash(hash);
+      const mtimed= mtime? phpTimestampToDate(mtime):new Date();
+      objects.push({ hash, content: Buffer.from(content, 'base64'), mtime:mtimed });
+        /*downloaded++;
         if (await objectStore.has(hash)) {
             skipped++;
         } else {
             const binary = Buffer.from(content, 'base64');
             await objectStore.put(hash,  binary);
-        }
+        }*/
     }
-    console.log(downloaded," objects downloaded. ",skipped," objects skipped.");
-    return newDownloadSince;
+    return {objects,newest:newDownloadSince};
+    //console.log(downloaded," objects downloaded. ",skipped," objects skipped.");
+    //return newDownloadSince;
   }
 }
