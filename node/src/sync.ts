@@ -3,6 +3,7 @@ import * as path from 'path';
 import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config, IgnoreState } from './types.js';
 import { factory, maxMtime, ObjectStore } from './objects.js';
 import { REMOTE_CONF_FILE, REMOTE_STATE_FILE } from './constants.js';
+import { toBase64 } from './util.js';
 
 export const GIT_DIR_NAME=".gsync";
 export async function postJson(url:string, data={}){
@@ -133,37 +134,18 @@ export class Sync {
         const objects: { hash: Hash; content: string }[] = res.data.objects;
         const newDownloadSince = res.data.newest - 0;
         const objectStore=await this.getObjectStore();
-        let donloaded=0, skipped=0;
+        let downloaded=0, skipped=0;
         for (const { hash, content } of objects) {
             asHash(hash);
-            donloaded++;
+            downloaded++;
             if (await objectStore.has(hash)) {
                 skipped++;
             } else {
                 const binary = Buffer.from(content, 'base64');
                 await objectStore.put(hash,  binary);
             }
-    
-            /*const dir = hash.slice(0, 2);
-            const file = hash.slice(2);
-            const dirPath = path.join(objectsDir, dir);
-            const filePath = path.join(dirPath, file);
-
-            if (!fs.existsSync(dirPath)) {
-                fs.mkdirSync(dirPath, { recursive: true });
-            }
-
-            if (!fs.existsSync(filePath)) {
-                const binary = Buffer.from(content, 'base64');
-                fs.writeFileSync(filePath, binary);
-                //console.log('Saved:', hash);
-                donloaded++;
-            } else {
-                skipped++;
-                //console.log('Skipped (exists):', hash);
-            }*/
         }
-        console.log(donloaded," objects downloaded. ",skipped," objects skipped.");
+        console.log(downloaded," objects downloaded. ",skipped," objects skipped.");
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
     }
@@ -223,18 +205,6 @@ export class Sync {
     }
 }
 
-function toBase64(content: Uint8Array<ArrayBufferLike>): string {
-    if (typeof btoa !== "undefined") {
-        let binary = "";
-        for (let i = 0; i < content.length; i++) {
-            binary += String.fromCharCode(content[i]);
-        }
-        return btoa(binary);
-    } else {
-        // Node.js environment without Buffer (fallback)
-        throw new Error("Base64 encoding not supported in this environment without Buffer.");
-    }
-}
 /*
 downloadObjects().catch(console.error);
 
