@@ -131,7 +131,7 @@ function setHead(array $data): string {
     if (file_exists($head_path)) {
         $real_current=file_get_contents($head_path);
         if ($current==null) {
-            e505("$current is null");
+            e505("head for '$branch' is already set. 'current' parameter should be specified.");
         }
         if ($real_current!==$current) {
             return $real_current;//"prev hash does not match: set $branch to $next";

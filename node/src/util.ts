@@ -1,4 +1,5 @@
-export type PHPTimestamp=number;
+import { asPHPTimestamp, PHPTimestamp } from "./types.js";
+
 export function toBase64(content: Uint8Array<ArrayBufferLike>): string {
     if (typeof btoa !== "undefined") {
         let binary = "";
@@ -15,5 +16,5 @@ export function phpTimestampToDate(phpts:PHPTimestamp):Date {
     return new Date(phpts * 1000);
 }
 export function dateToPhpTimestamp(d:Date):PHPTimestamp {
-    return Math.floor(d.getTime() / 1000);
+    return asPHPTimestamp(Math.floor(d.getTime() / 1000));
 }

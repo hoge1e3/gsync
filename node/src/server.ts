@@ -1,4 +1,4 @@
-import { ObjectStore } from './objects.js';
+import { ObjectEntry, ObjectStore } from './objects.js';
 import { asHash, BranchName, GitObject, Hash } from './types.js';
 import { dateToPhpTimestamp, phpTimestampToDate, toBase64 } from './util.js';
 
@@ -10,8 +10,10 @@ export interface WebServerApi {
   objectStore: ObjectStore;
   createRepository(): Promise<{ repo_id: string }>;
   setHead(branch: BranchName, current:Hash, next: Hash): Promise<void>;
-  getHead(branch: BranchName,allow_nonexistent:boolean): Promise<Hash>;
-  uploadObjects(objects: GitObject[]): Promise<Date>;
+  addHead(branch: BranchName, next: Hash): Promise<void>;
+  hasHead(branch: BranchName): Promise<boolean>;
+  getHead(branch: BranchName): Promise<Hash>;
+  uploadObjects(objects: ObjectEntry[]): Promise<Date>;
   downloadObjects(since?: Date): Promise<Date>;
 }
 type Actions="create"|"upload"|"download"|"get_head"|"set_head";
@@ -42,6 +44,18 @@ export class PHPClient implements WebServerApi {
     return res;
   }
 
+  async addHead(branch: BranchName, next: Hash): Promise<void> {
+    const data=await this.post("set_head", {
+      repo_id: this.repoId,
+      branch,
+      next,
+      api_key: this.apiKey,
+    });
+    if (data.status==="ok") {
+        return ;
+    }
+        throw new Error(branch+" already exists. status="+data.status);
+  }
   async setHead(branch: BranchName, current:Hash, next: Hash): Promise<void> {
     const data=await this.post("set_head", {
       repo_id: this.repoId,
@@ -55,17 +69,27 @@ export class PHPClient implements WebServerApi {
     throw new Error("Atomic change failed: Someone changed the head to "+data.status);
   }
 
-  async getHead(branch: BranchName, allow_nonexistent=false): Promise<Hash> {
+
+  async hasHead(branch: BranchName): Promise<boolean> {
     const res = await this.post("get_head", {
       repo_id: this.repoId,
       branch,
-      allow_nonexistent: allow_nonexistent?1:0,
+      allow_nonexistent: 1,
       api_key: this.apiKey,
     });
-    return res.head as Hash;
+    return !!res.hash;
+  }
+  async getHead(branch: BranchName): Promise<Hash> {
+    const res = await this.post("get_head", {
+      repo_id: this.repoId,
+      branch,
+      allow_nonexistent: 0,
+      api_key: this.apiKey,
+    });
+    return asHash(res.hash);
   }
 
-  async uploadObjects(objects: GitObject[]): Promise<Date> {
+  async uploadObjects(objects: ObjectEntry[]): Promise<Date> {
     const sObjects: StringifiedObject[] = 
         objects.map((entry)=>({
             hash: entry.hash,

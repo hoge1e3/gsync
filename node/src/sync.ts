@@ -1,12 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config, IgnoreState } from './types.js';
-import { factory, maxMtime, ObjectStore } from './objects.js';
+import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config, IgnoreState, GitObject, asPHPTimestamp } from './types.js';
+import { factory, maxMtime, ObjectStore,ObjectEntry } from './objects.js';
 import { REMOTE_CONF_FILE, REMOTE_STATE_FILE } from './constants.js';
-import { toBase64 } from './util.js';
+import { dateToPhpTimestamp, phpTimestampToDate, toBase64 } from './util.js';
+import { PHPClient, WebServerApi } from './server.js';
 
 export const GIT_DIR_NAME=".gsync";
-export async function postJson(url:string, data={}){
+/*export async function postJson(url:string, data={}){
     const response=await fetch(url, {method:"POST", body:JSON.stringify(data)});
     if (response.status!==200) {
         if(response.status===403) {
@@ -17,9 +18,10 @@ export async function postJson(url:string, data={}){
         throw new Error(await response.text());
     }
     return {data: (await response.json()) as any};
-}
+}*/
 export class Sync {
     _objectStore: ObjectStore|undefined;
+    _webapi: WebServerApi|undefined;
     constructor(public gitDir: FilePath) { 
     }
     async getObjectStore(): Promise<ObjectStore> {
@@ -29,22 +31,40 @@ export class Sync {
         this._objectStore=new FileBasedObjectStore(objdir);   */
         return this._objectStore;
     }
+    async getWebApi():Promise<WebServerApi> {
+        if (this._webapi) return this._webapi;
+        const config=await this.readConfig();
+        this._webapi=new PHPClient(
+            config.serverUrl,
+            config.repoId,
+            config.apiKey,
+            await this.getObjectStore(),
+        );
+        return this._webapi;
+    }
     async init(serverUrl: string):Promise<string> {
         if (fs.existsSync(this.gitDir)) {
             throw new Error("Cannot init: "+this.gitDir+" already exists.");
         }
+        const apiKey=Math.random().toString(36).slice(2);
+        this._webapi=new PHPClient(
+            serverUrl, 
+            "init",
+            apiKey,
+            await this.getObjectStore(),
+        );
         // invoke create command (see /php/index.php)
         // and return new repository id
-        const res = await postJson(`${serverUrl}?action=create`);
+        const data = await this._webapi.createRepository();// postJson(`${serverUrl}?action=create`);
         // and write Config
         const conf: Config = {
             serverUrl,
-            repoId: res.data.repo_id,
+            repoId: data.repo_id,
             apiKey: Math.random().toString(36).slice(2) ,
         };
         await fs.promises.mkdir(this.gitDir, { recursive: true });
         await this.writeConfig(conf);
-        return res.data.repo_id;
+        return data.repo_id;
     }
     /*private _repo:Repo|undefined;
     get repo():Repo{
@@ -72,8 +92,8 @@ export class Sync {
         const statefile = this.stateFile();
         if (!fs.existsSync(statefile)) {
             return {
-                downloadSince: 0,
-                uploadSince: 0,
+                downloadSince: asPHPTimestamp(0),
+                uploadSince: asPHPTimestamp(0),
             };
         }
         const state = JSON.parse(await fs.promises.readFile(statefile, { encoding: "utf-8" })) as State;
@@ -91,30 +111,30 @@ export class Sync {
         const config = await this.readConfig();
         const state = await this.readState();
         //const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
-        const objects: { hash: string; content: string }[] = [];
+        const objects: ObjectEntry/*{ hash: string; content: string }*/[] = [];
 
         //const dirs = fs.readdirSync(objectsDir).filter(d => /^[0-9a-f]{2}$/.test(d));
-        const newUploadSince = Math.floor(Date.now() / 1000);
+        const newUploadSince = dateToPhpTimestamp(new Date());
         const objectStore=await this.getObjectStore();
-        for await (const entry of objectStore.iterate(new Date(state.uploadSince * 1000))) {
-            objects.push({
+        for await (const entry of objectStore.iterate(phpTimestampToDate(state.uploadSince))) {
+            objects.push( entry/*{
                 hash: entry.hash,
                 content: toBase64(entry.content)
-            });
+            }*/);
         }
         if (objects.length === 0) {
             console.log('No new objects to upload.');
             return;
         }
         //console.log(objects);
-
-        const res = await postJson(`${config.serverUrl}?action=upload`, {
+        const api=await this.getWebApi();
+        const newest/*res*/ = await api.uploadObjects(objects)/* postJson(`${config.serverUrl}?action=upload`, {
             repo_id: config.repoId,
             api_key: config.apiKey,
             objects
-        });
+        })*/;
         await this.writeState({ uploadSince: newUploadSince, downloadSince: state.downloadSince });
-        console.log(`Uploaded ${objects.length} objects. Server timestamp:`, res.data.timestamp);
+        console.log(`Uploaded ${objects.length} objects. Server timestamp:`, newest/*res.data.timestamp*/);
     }
 
 
@@ -122,18 +142,19 @@ export class Sync {
         const config = await this.readConfig();
         const state = await this.readState();
         //const objectsDir = path.join(this.gitDir, 'objects');/*replace by ObjectStore*/
-
-        const res = await postJson(`${config.serverUrl}?action=download`, {
+        const api=await this.getWebApi();
+        const since=  ignoreState==="all" ? new Date(0):
+              ignoreState==="max_mtime" ? await maxMtime(await this.getObjectStore()):
+              phpTimestampToDate(state.downloadSince);
+        const newest = await api.downloadObjects(since/*postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
             api_key: config.apiKey,
-            since: ignoreState==="all" ? 0:
-                ignoreState==="max_mtime" ? await maxMtime(await this.getObjectStore()):
-                state.downloadSince,
-        });
+            since,
+        }*/);
 
-        const objects: { hash: Hash; content: string }[] = res.data.objects;
-        const newDownloadSince = res.data.newest - 0;
-        const objectStore=await this.getObjectStore();
+        //const objects: { hash: Hash; content: string }[] = res.data.objects;
+        const newDownloadSince = dateToPhpTimestamp(newest);
+        /*const objectStore=await this.getObjectStore();
         let downloaded=0, skipped=0;
         for (const { hash, content } of objects) {
             asHash(hash);
@@ -146,31 +167,33 @@ export class Sync {
             }
         }
         console.log(downloaded," objects downloaded. ",skipped," objects skipped.");
-        await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
+        */
+       await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
     }
     async hasRemoteHead(branch: BranchName):Promise<boolean> {
         const { repoId, serverUrl, apiKey } = await this.readConfig();
-        const res = await postJson(`${serverUrl}?action=get_head`, {
+        const api=await this.getWebApi();
+        const data = await api.hasHead(branch)/* postJson(`${serverUrl}?action=get_head`, {
             repo_id: repoId,
             allow_nonexistent: 1,
             api_key: apiKey,
             branch
-        });
-        return !!res.data.hash;
+        })*/;
+        return /*!!*/data/*.hash*/;
     }
 
 
     async getRemoteHead(branch: BranchName): Promise<Hash> {
         const { repoId, serverUrl, apiKey } = await this.readConfig();
-
-        const res = await postJson(`${serverUrl}?action=get_head`, {
+        const api=await this.getWebApi();
+        const hash = await api.getHead(branch/*postJson(`${serverUrl}?action=get_head`, {
             repo_id: repoId,
             branch,
             api_key: apiKey,
-        });
+        }*/);
 
-        const hash = res.data.hash as Hash;
+        //const hash = res.data.hash as Hash;
         //await this.repo.updateHead(asLocalRef(branch), hash);
         console.log(`HEAD of '${branch}': ${hash ?? '(not set)'}`);
         return hash;
@@ -178,30 +201,32 @@ export class Sync {
     async setRemoteHead(branch: BranchName, current:Hash, next:Hash): Promise<void> {
         const { repoId, serverUrl, apiKey } = await this.readConfig();
         //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
-        const {data}=await postJson(`${serverUrl}?action=set_head`, {
+        const api=await this.getWebApi();
+        /*const {data}=*/await api.setHead(branch, current, next/*postJson(`${serverUrl}?action=set_head`, {
             repo_id: repoId,
             branch,
             current, next,
             api_key: apiKey, 
-        });
-        if (data.status==="ok") {
+        }*/);
+        /*if (data.status==="ok") {
             return ;
         }
-        throw new Error("Atomic change failed: Someone changed the head to "+data.status);
+        throw new Error("Atomic change failed: Someone changed the head to "+data.status);*/
     }
     async addRemoteHead(branch: BranchName, next:Hash): Promise<void> {
         const { repoId, serverUrl, apiKey } = await this.readConfig();
         //const hash:Hash= await this.repo.readHead(asLocalRef(branch));
-        const {data}=await postJson(`${serverUrl}?action=set_head`, {
+        const api=await this.getWebApi();
+        /*const {data}=*/await api.addHead(branch, next/*postJson(`${serverUrl}?action=set_head`, {
             repo_id: repoId,
             branch,
             next,
             api_key: apiKey,
-        });
-        if (data.status==="ok") {
+        }*/);
+        /*if (data.status==="ok") {
             return ;
         }
-        throw new Error(branch+" already exists. status="+data.status);
+        throw new Error(branch+" already exists. status="+data.status);*/
     }
 }
 

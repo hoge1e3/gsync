@@ -3,7 +3,7 @@
     "description": "git-like sync tool for AcePad",
     "scripts": {
         "build": "npx tsc",
-        "test": "npm run build && node js/test/test-git.js"
+        "test": "npm run build && node js/test/test2.js"
     },
     "bin": {
         "gsync": "./bin.js"

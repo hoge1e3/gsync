@@ -1,4 +1,8 @@
-
+const sym_pts=Symbol("PHPTimestamp");
+export type PHPTimestamp=number&{[sym_pts]:1};
+export function asPHPTimestamp(t:number) {
+    return t as PHPTimestamp;
+}
 const SymHash=Symbol("hash");
 export type Config = {
     serverUrl: string,
@@ -6,8 +10,8 @@ export type Config = {
     apiKey: string,
 };
 export type State = {
-    downloadSince: number,
-    uploadSince: number,
+    downloadSince: PHPTimestamp,
+    uploadSince: PHPTimestamp,
 };
 export type IgnoreState=
   "none"|/* do not ignore */
