@@ -10,6 +10,7 @@ export type ObjectValue = {
 export type ObjectEntry = {
     hash: Hash;
 }&ObjectValue;
+const STATE_ID="state";
 export interface ObjectStore {
     has(hash: Hash): Promise<boolean>;
     get(hash: Hash): Promise<ObjectValue>;
@@ -71,7 +72,7 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
                 // read from stateFile
                 if (fs.existsSync(this.stateFile)) {
                     const state = JSON.parse(fs.readFileSync(this.stateFile, { encoding: "utf-8" })) as State;
-                    await reqP(store.add(state));
+                    await reqP(store.add(state, STATE_ID));
                 }
             }
             this.dbInit.resolve(this.db);
@@ -99,7 +100,7 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
         const store=singleStoreTransaction(this.db!, STATE_STORE_NAME);
         const cursor=await reqP(store.openCursor());
         if (!cursor) {
-            await reqP(store.put(state));
+            await reqP(store.put(state, STATE_ID));
         } else {
             const key=cursor.key;
             await reqP(store.put(state, key));
