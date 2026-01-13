@@ -1,4 +1,4 @@
-import { asFilePath, asHash, Config, FilePath, Hash, State } from "./types.js";
+import { asFilePath, asHash, asPHPTimestamp, Config, FilePath, Hash, State } from "./types.js";
 import * as path from "path";
 import * as fs from "fs";
 import MutablePromise from "mutable-promise";
@@ -86,7 +86,12 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
         await this.dbInit;
         const store=singleStoreTransaction(this.db!, STATE_STORE_NAME,"readonly");
         const cursor=await reqP(store.openCursor());
-        if (!cursor) throw new Error("No state is set");
+        if (!cursor) {
+            return {
+                downloadSince: asPHPTimestamp(0),
+                uploadSince: asPHPTimestamp(0),
+            };
+        }
         return cursor.value;
     }
     async setState(state: State): Promise<void> {
@@ -181,6 +186,12 @@ export class FileBasedObjectStore implements ObjectStore {
     constructor(public path: FilePath, public stateFile:FilePath) {// path to "object" folder inside .git folder
     }
     async getState(): Promise<State> {
+        if (!fs.existsSync(this.stateFile)) {
+            return {
+                downloadSince: asPHPTimestamp(0),
+                uploadSince: asPHPTimestamp(0),
+            };
+        }
         return JSON.parse(await fs.promises.readFile(this.stateFile, "utf-8"));
     }
     async setState(state: State): Promise<void> {

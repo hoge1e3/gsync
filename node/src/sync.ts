@@ -89,6 +89,7 @@ export class Sync {
     }
 
     async readState(): Promise<State> {
+        return await (await this.getObjectStore()).getState();
         const statefile = this.stateFile();
         if (!fs.existsSync(statefile)) {
             return {
@@ -103,6 +104,7 @@ export class Sync {
         return asFilePath(path.join(this.gitDir, REMOTE_STATE_FILE));
     }
     async writeState(state: State) {
+        return await (await this.getObjectStore()).setState(state);
         const statefile = this.stateFile();
         await fs.promises.writeFile(statefile, JSON.stringify(state));
     }

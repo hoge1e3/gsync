@@ -219,7 +219,7 @@ async function test_sync(name="clonetes") {
 }
 async function testObjectStore(){
     const since1=new Date();
-    const s=new FileBasedObjectStore(asFilePath("../cotest/.gsync/objects"));
+    const s=new FileBasedObjectStore(asFilePath("../cotest/.gsync/objects"),asFilePath("../cotest/.gsync/remote-state.json"));
     const all:ObjectEntry[]=[];
     for await (let e of s.iterate(new Date(0))) {
         all.push(e);
@@ -233,7 +233,7 @@ async function testObjectStore(){
     for await (let e of s.iterate(d)) {
         console.log("iter1", e.hash, e.content.byteLength, e.mtime);
     }
-    const s2=new FileBasedObjectStore(asFilePath("../cotest/.gsync/objects2"));
+    const s2=new FileBasedObjectStore(asFilePath("../cotest/.gsync/objects2"), asFilePath("../cotest/.gsync/remote-state.json"));
     s2.put(all[0].hash, all[0].content);
     const val=await s2.get(all[0].hash);
     const c=val.content;
