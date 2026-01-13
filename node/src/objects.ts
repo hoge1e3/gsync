@@ -1,8 +1,8 @@
-import { asFilePath, asHash, Config, FilePath, Hash } from "./types.js";
+import { asFilePath, asHash, Config, FilePath, Hash, State } from "./types.js";
 import * as path from "path";
 import * as fs from "fs";
 import MutablePromise from "mutable-promise";
-import { DB_PREFIX, REMOTE_CONF_FILE, STORE_NAME } from "./constants.js";
+import { DB_PREFIX, REMOTE_CONF_FILE, REMOTE_STATE_FILE, STATE_STORE_NAME, STORE_NAME } from "./constants.js";
 export type ObjectValue = {
     content: Uint8Array;
     mtime: Date;
@@ -15,15 +15,18 @@ export interface ObjectStore {
     get(hash: Hash): Promise<ObjectValue>;
     put(hash: Hash, compressed: Uint8Array): Promise<void>;
     iterate(since: Date): AsyncGenerator<ObjectEntry>;
+    getState():Promise<State>;
+    setState(state:State):Promise<void>;
 }
 export async function factory(gitDir:FilePath):Promise<ObjectStore>{
     const objdir = asFilePath(path.join(gitDir, 'objects'));
+    const stateFile = asFilePath(path.join(gitDir, REMOTE_STATE_FILE));
     if (globalThis.indexedDB && !fs.existsSync(objdir)) {
         const conffile = asFilePath(path.join(gitDir, REMOTE_CONF_FILE));
         const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as Config;
-        return new IndexedDBBasedObjectStore(DB_PREFIX+"_"+conf.repoId);
+        return new IndexedDBBasedObjectStore(DB_PREFIX+"_"+conf.repoId, stateFile);
     } else {
-        return new FileBasedObjectStore(objdir);   
+        return new FileBasedObjectStore(objdir, stateFile);   
     }
 }
 export async function maxMtime(o:ObjectStore) {
@@ -33,26 +36,68 @@ export async function maxMtime(o:ObjectStore) {
     }
     return max;
 }
+export function reqP<T>(request:IDBRequest<T>):Promise<T> {
+    return new Promise<T>((resolve,reject)=>{
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+export function singleStoreTransaction(db:IDBDatabase, table:string, mode:IDBTransactionMode="readwrite") {
+    const transaction = db.transaction(table, mode);
+    const store = transaction.objectStore(table);
+    return store;
+}
 export class IndexedDBBasedObjectStore implements ObjectStore {
     private db: IDBDatabase | null = null;
     dbInit=new MutablePromise<IDBDatabase>();
-    constructor(public dbName: string) {
+    constructor(public dbName: string, public stateFile: FilePath) {
         // Initialize IndexedDB
-        const request = indexedDB.open(dbName);
+        const request = indexedDB.open(dbName,2);
         request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
             const db = (event.target as IDBOpenDBRequest).result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
                 db.createObjectStore(STORE_NAME);
             }
+            if (!db.objectStoreNames.contains(STATE_STORE_NAME)) {
+                db.createObjectStore(STATE_STORE_NAME);
+            }
         };
-        request.onsuccess = (event: Event) => {
+        request.onsuccess = async (event: Event) => {
             this.db = (event.target as IDBOpenDBRequest).result;
+            // if STATE_STORE_NAME is empty, read from stateFile and store it
+            const store = singleStoreTransaction(this.db, STATE_STORE_NAME);
+            const countRequest = store.count();
+            if (await reqP(countRequest)=== 0) {
+                // read from stateFile
+                if (fs.existsSync(this.stateFile)) {
+                    const state = JSON.parse(fs.readFileSync(this.stateFile, { encoding: "utf-8" })) as State;
+                    await reqP(store.add(state));
+                }
+            }
             this.dbInit.resolve(this.db);
         };
         request.onerror = (event: Event) => {
             const error = (event.target as IDBOpenDBRequest).error;
             console.error("IndexedDB error:", error);
             this.dbInit.reject(error);
+        }
+    }
+    async getState(): Promise<State> {
+        await this.dbInit;
+        const store=singleStoreTransaction(this.db!, STATE_STORE_NAME,"readonly");
+        const cursor=await reqP(store.openCursor());
+        if (!cursor) throw new Error("No state is set");
+        return cursor.value;
+    }
+    async setState(state: State): Promise<void> {
+        await this.dbInit;
+        const store=singleStoreTransaction(this.db!, STATE_STORE_NAME);
+        const cursor=await reqP(store.openCursor());
+        if (!cursor) {
+            await reqP(store.put(state));
+        } else {
+            const key=cursor.key;
+            await reqP(store.put(state, key));
         }
     }
     async has(hash: Hash): Promise<boolean> {
@@ -133,7 +178,13 @@ export class FileBasedObjectStore implements ObjectStore {
     /*
     git-style object store
     */
-    constructor(public path: FilePath) {// path to "object" folder inside .git folder
+    constructor(public path: FilePath, public stateFile:FilePath) {// path to "object" folder inside .git folder
+    }
+    async getState(): Promise<State> {
+        return JSON.parse(await fs.promises.readFile(this.stateFile, "utf-8"));
+    }
+    async setState(state: State): Promise<void> {
+        return await fs.promises.writeFile(this.stateFile, JSON.stringify(state));
     }
     private pathOf(hash: Hash): FilePath {
         // returns path to object file
