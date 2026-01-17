@@ -90,23 +90,14 @@ export class Sync {
 
     async readState(): Promise<State> {
         return await (await this.getObjectStore()).getState();
-        const statefile = this.stateFile();
-        if (!fs.existsSync(statefile)) {
-            return {
-                downloadSince: asPHPTimestamp(0),
-                uploadSince: asPHPTimestamp(0),
-            };
-        }
-        const state = JSON.parse(await fs.promises.readFile(statefile, { encoding: "utf-8" })) as State;
-        return state;
+        
     }
     private stateFile() {
         return asFilePath(path.join(this.gitDir, REMOTE_STATE_FILE));
     }
     async writeState(state: State) {
         return await (await this.getObjectStore()).setState(state);
-        const statefile = this.stateFile();
-        await fs.promises.writeFile(statefile, JSON.stringify(state));
+
     }
 
     async uploadObjects(): Promise<void> {
@@ -148,7 +139,7 @@ export class Sync {
         const since=  ignoreState==="all" ? new Date(0):
               ignoreState==="max_mtime" ? await maxMtime(await this.getObjectStore()):
               phpTimestampToDate(state.downloadSince);
-        const {newest,objects} = await api.downloadObjects(since/*postJson(`${config.serverUrl}?action=download`, {
+        const {newest,objects} = await api.downloadSince(since/*postJson(`${config.serverUrl}?action=download`, {
             repo_id: config.repoId,
             api_key: config.apiKey,
             since,

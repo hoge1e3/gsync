@@ -61,10 +61,38 @@ function uploadObjects(array $data): string {
 
     return $now;
 }
+function downloadObjectsByHashList(string $repo_id, array $hash_list): array {
+    $repo_path = REPO_DIR . "/$repo_id/objects";
+
+    if (!is_dir($repo_path)) {
+        http_response_code(404);
+        exit(json_encode(['error' => 'Repo $repo_id not found']));
+    }
+
+    $result = [];
+    foreach ($hash_list as $hash) {
+        $dir = substr($hash, 0, 2);
+        $file = substr($hash, 2);
+        $full = "$repo_path/$dir/$file";
+        if (!file_exists($full)) continue;
+        $binary = file_get_contents($full);
+        $base64 = base64_encode($binary);
+        $result[] = [
+            'hash' => $hash,
+            'content' => $base64,
+        ];
+    }
+
+    return $result;
+}
+
 function downloadObjects(array $data): array {
     $repo_id = $data['repo_id'];
-    $since = $data['since'];
     $repo_path = REPO_DIR . "/$repo_id/objects";
+    if (isset($data["hash_list"])) {
+        return downloadObjectsByHashList($repo_id, $data["hash_list"]);
+    }
+    $since = $data['since'];
 
     if (!is_dir($repo_path)) {
         http_response_code(404);

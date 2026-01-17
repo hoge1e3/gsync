@@ -1,3 +1,4 @@
+import { hash } from 'node:crypto';
 import { ObjectEntry, ObjectStore } from './objects.js';
 import { asHash, BranchName, GitObject, Hash, PHPTimestamp } from './types.js';
 import { dateToPhpTimestamp, phpTimestampToDate, toBase64 } from './util.js';
@@ -14,7 +15,8 @@ export interface WebServerApi {
   hasHead(branch: BranchName): Promise<boolean>;
   getHead(branch: BranchName): Promise<Hash>;
   uploadObjects(objects: ObjectEntry[]): Promise<Date>;
-  downloadObjects(since?: Date): Promise<{objects:ObjectEntry[],newest:Date}>;
+  downloadSince(since?: Date): Promise<{objects:ObjectEntry[],newest:Date}>;
+  downloadObjects(hashList: Hash[]): Promise<ObjectEntry[]>;
 }
 type Actions="create"|"upload"|"download"|"get_head"|"set_head";
 type StringifiedObject={ hash: Hash; content: string, mtime?:PHPTimestamp };
@@ -103,7 +105,7 @@ export class PHPClient implements WebServerApi {
     return phpTimestampToDate(data.timestamp);
   }
 
-  async downloadObjects(since:Date): Promise<{objects:ObjectEntry[],newest:Date}> {
+  async downloadSince(since:Date): Promise<{objects:ObjectEntry[],newest:Date}> {
     const res = await this.post("download", {
       repo_id: this.repoId,
       api_key: this.apiKey,
@@ -129,5 +131,20 @@ export class PHPClient implements WebServerApi {
     return {objects,newest:newDownloadSince};
     //console.log(downloaded," objects downloaded. ",skipped," objects skipped.");
     //return newDownloadSince;
+  }
+  async downloadObjects(hashList: Hash[]): Promise<ObjectEntry[]> {
+    const res = await this.post("download", {
+      repo_id: this.repoId,
+      api_key: this.apiKey,
+      hash_list: hashList,
+    });
+    const sObjects=res.objects as StringifiedObject[];
+    const objects: ObjectEntry[]=[];
+    for (const { hash, content, mtime } of sObjects) {
+      asHash(hash);
+      const mtimed= mtime? phpTimestampToDate(mtime):new Date();
+      objects.push({ hash, content: Buffer.from(content, 'base64'), mtime:mtimed });
+    }
+    return objects;
   }
 }
