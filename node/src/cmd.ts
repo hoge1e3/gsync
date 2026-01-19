@@ -182,7 +182,11 @@ export function findGitDir(cwd: FilePath):FilePath {
     }
 }
 export async function commit(dir: string):Promise<Hash> {
-    const repo=await offlineRepo(findGitDir(asFilePath(dir)));
+    const gitDir = findGitDir(asFilePath(dir));
+    // even commit is failed unless online 
+    const syncf=new SyncFactory(gitDir);
+    const sync=await syncf.load();
+    const repo=sync.repo;
     if (!fs.existsSync(repo.headPath())) {
         await repo.setCurrentBranchName(asBranchName("main"));
     }
@@ -191,6 +195,7 @@ export async function commit(dir: string):Promise<Hash> {
     const tree=await repo.buildTreeFromWorkingDir();
     const curCommitHash = await repo.readHead(ref);
     console.log("curCommitHash", curCommitHash);
+    // even commit is failed unless online 
     const curCommit = curCommitHash ? await repo.readCommit(curCommitHash) : null;
     const newCommitTreeHash=await repo.writeTree(tree);
     console.log("newCommitTreeHash", newCommitTreeHash);
