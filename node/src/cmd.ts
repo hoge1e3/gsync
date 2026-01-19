@@ -1,8 +1,9 @@
 import * as path from "path";
 import { Repo, sameExceptCRLF } from "./git.js";
-import { GIT_DIR_NAME, Sync } from "./sync.js";
-import { Config, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, CloneOptions, ConflictResolutionPolicy, IgnoreState } from "./types.js";
+import { DownloadableObjectStore, GIT_DIR_NAME, Sync, SyncFactory } from "./sync.js";
+import { APIConfig, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, CloneOptions, ConflictResolutionPolicy, IgnoreState } from "./types.js";
 import * as fs from "fs";
+import { factory as offlineObjectStoreFactory} from "./objects.js";
 
 export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
     // 1st command line arg is either clone commit sync
@@ -44,8 +45,8 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
             return await log(cwd);
         case "cat-file":
             return await catFile(cwd, args[0]);
-        case "download-objects":
-            return await downloadObjects(cwd, args.includes("-a")?"all":"max_mtime");
+        //case "download-objects":
+        //    return await downloadObjects(cwd, args.includes("-a")?"all":"max_mtime");
         case "manage":
             return await manage(cwd);
         case "scan":
@@ -86,9 +87,9 @@ showKey:boolean,shell:boolean){
       }
         const field=[d];
         if (showKey || showRepo || showUrl) {
-            const repo=new Repo(asFilePath(path.join(d, GIT_DIR_NAME)));
-            const sync=new Sync(repo.gitDir);
-            const conf=await sync.readConfig();
+            const gitDir=asFilePath(path.join(d, GIT_DIR_NAME));
+            const syncf=new SyncFactory(gitDir);
+            const conf=await syncf.readConfig();
             if (showUrl) field.push(conf.serverUrl);
             if (showRepo) field.push(conf.repoId);
             if (showKey) field.push(conf.apiKey);
@@ -99,8 +100,8 @@ showKey:boolean,shell:boolean){
 export async function manage(cwd:string, gitDirName=GIT_DIR_NAME) {
     const dir=path.join(cwd, gitDirName);
     const gitDir=asFilePath(dir);
-    const sync=new Sync(gitDir);
-    const conf=await sync.readConfig();
+    const syncf=new SyncFactory(gitDir);
+    const conf=await syncf.readConfig();
     const repoId=conf.repoId;
     const url=conf.serverUrl;
     const manage=
@@ -109,8 +110,14 @@ export async function manage(cwd:string, gitDirName=GIT_DIR_NAME) {
         url+"manage.php";
     console.log(`Open ${manage}?repo=${repoId}`);
 }
+async function offlineRepo(gitDir:FilePath) {
+    const objectStore=await offlineObjectStoreFactory(gitDir);
+    const repo=new Repo(gitDir,objectStore);
+    return repo;
+}
 export async function catFile(dir: string, hash: string ) {
-    const repo=new Repo(findGitDir(asFilePath(dir)));
+    const gitDir=findGitDir(asFilePath(dir));
+    const repo=await offlineRepo(gitDir);
     const obj=await repo.readObject(asHash(hash));
     if (!obj) {
         console.log("No such object: ", hash);
@@ -127,10 +134,11 @@ export async function init(cwd: string, serverUrl: string, gitDirName=GIT_DIR_NA
         console.warn(`WARNING! ${serverUrl} should be ends with .php or / `);
     }
     const gitDir=asFilePath(dir);
-    const sync=new Sync(gitDir);
-    const repoId=await sync.init(serverUrl);
+    const syncf=new SyncFactory(gitDir);
+    const sync=await syncf.init(serverUrl);
+    const repoId=sync.webapi.config.repoId;
     console.log("Initialized new repository with id: ", repoId);
-    const repo=new Repo(gitDir);
+    const repo=sync.repo;//new Repo(gitDir);
     repo.setCurrentBranchName(asBranchName("main"));
     return repoId;
 }
@@ -138,7 +146,7 @@ export async function clone(into:string,    serverUrl: string, repoId: string, b
     await _clone(asFilePath(into), {serverUrl,repoId,apiKey:Math.random().toString(36).slice(2)} , asBranchName(branch), options );
 }
 
-async function _clone(into:FilePath, config:Config,  branch: BranchName, options: CloneOptions) {
+async function _clone(into:FilePath, config:APIConfig,  branch: BranchName, options: CloneOptions) {
     let skipco;
     if (fs.existsSync(into) && fs.readdirSync(into).length>0) {
         if (!options.allowNonEmpty) throw new Error(`${into} is not empty.`);
@@ -148,10 +156,11 @@ async function _clone(into:FilePath, config:Config,  branch: BranchName, options
     if (!fs.existsSync(into)) fs.mkdirSync(into);
     const newGitDir=asFilePath(path.join(into, options.gitDirName));
     fs.mkdirSync(newGitDir);
-    const newSync=new Sync(newGitDir);
-    await newSync.writeConfig(config);
-    const repo=new Repo(newGitDir);
-    await newSync.downloadObjects();
+    const newSyncf=new SyncFactory(newGitDir);
+    await newSyncf.writeConfig(config);
+    const newSync=await newSyncf.load();
+    const repo=newSync.repo;//new Repo(newGitDir);
+    //await newSync.downloadObjects();
     const headCommitHash=await newSync.getRemoteHead(branch);
     repo.updateHead(asLocalRef(branch), headCommitHash );
     if (!skipco) {
@@ -173,7 +182,7 @@ export function findGitDir(cwd: FilePath):FilePath {
     }
 }
 export async function commit(dir: string):Promise<Hash> {
-    const repo=new Repo(findGitDir(asFilePath(dir)));
+    const repo=await offlineRepo(findGitDir(asFilePath(dir)));
     if (!fs.existsSync(repo.headPath())) {
         await repo.setCurrentBranchName(asBranchName("main"));
     }
@@ -216,18 +225,19 @@ export async function syncWithRetry(dir: string,
     }
     throw new Error("Auto-merge repeated 5 times. Aborted.");
 }
-export async function downloadObjects(dir:string, ignoreState:IgnoreState) {
+/*export async function downloadObjects(dir:string, ignoreState:IgnoreState) {
     const gitDir = findGitDir(asFilePath(dir));
     const sync=new Sync(gitDir);
     await sync.downloadObjects(ignoreState);
-}
+}*/
 export async function sync(dir: string, 
     conflictResolutionPolicy:ConflictResolutionPolicy):Promise<SyncStatus> {
 
     const localCommitHash=await commit(dir);
     const gitDir = findGitDir(asFilePath(dir));
-    const sync=new Sync(gitDir);
-    const repo=new Repo(gitDir);
+    const syncf=new SyncFactory(gitDir);
+    const sync=await syncf.load();
+    const repo=sync.repo;//new Repo(gitDir);
     const branch=await repo.getCurrentBranchName();
     if (!await sync.hasRemoteHead(branch)) {
         // push to remote(new)
@@ -237,7 +247,7 @@ export async function sync(dir: string,
         return "newly_pushed";
     }
     const remoteCommitHash=await sync.getRemoteHead(branch);
-    await sync.downloadObjects();
+    //await sync.downloadObjects();
     const baseCommitHash=await repo.findMergeBase(localCommitHash, remoteCommitHash);
     if (remoteCommitHash===baseCommitHash) {
         // update remote
@@ -328,7 +338,7 @@ function makePostfix<T extends string>(filepath:T, postfix:string):T {
 export async function log(dir: string) {
     
     const gitDir = findGitDir(asFilePath(dir));
-    const repo=new Repo(gitDir);
+    const repo=await offlineRepo(gitDir);
     const b=await repo.getCurrentBranchName();
     let ch=await repo.readHead(asLocalRef(b));
     while (ch) {

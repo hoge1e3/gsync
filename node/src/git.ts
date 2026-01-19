@@ -8,19 +8,18 @@ import ignore, { Ignore } from 'ignore';
 //import { promisify } from 'util';
 import { asFilename, asHash, asMode, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef, PathInRepo, FilePath, asFilePath, asPathInRepo } from './types.js';
 import { inflate, deflate ,sha1Hex } from './codec.js';
-import { factory, ObjectStore } from './objects.js';
+import { ObjectEntry, ObjectStore } from './objects.js';
 /*const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);*/
 export class Repo {
-  _objectStore:ObjectStore|undefined;
-  constructor(public gitDir: FilePath) {
+  //_objectStore:ObjectStore|undefined;
+  constructor(public gitDir: FilePath, public objectStore:ObjectStore) {
   }
   async getObjectStore(): Promise<ObjectStore> {
-    if (this._objectStore) return this._objectStore;
+    return this.objectStore;
+    /*if (this._objectStore) return this._objectStore;
     this._objectStore=await factory(this.gitDir);
-    /*const objdir = asFilePath(path.join(this.gitDir, 'objects'));
-    this._objectStore=new FileBasedObjectStore(objdir);   */
-    return this._objectStore;
+    return this._objectStore;*/
   }
   toFilePath(pathInRepo: PathInRepo) {
     const r=path.join(this.workingDir(), pathInRepo );
@@ -35,7 +34,11 @@ export class Repo {
     /*const filePath = this.getObjectPath(hash);
     const compressed = await fs.promises.readFile(filePath);*/
     const objectStore=await this.getObjectStore();
-    const {mtime, content:compressed} = await objectStore.get(hash);
+    const objval=await objectStore.get(hash);
+    return Repo.objectEntryToGitObject({hash,...objval});
+  }
+  static async objectEntryToGitObject(objval:ObjectEntry):Promise<GitObject>{
+    const {mtime, content:compressed, hash} = objval;//await objectStore.get(hash);
 
     const data = Buffer.from(await inflate(new Uint8Array(compressed)));
 
@@ -63,7 +66,7 @@ export class Repo {
       return hash;
     }
     const compressed = await deflate(store);
-    objectStore.put(hash, compressed);
+    objectStore.put(hash, compressed, false);
 
     /*const filePath = this.getObjectPath(hash);
     if (fs.existsSync(filePath)) {
@@ -92,11 +95,13 @@ export class Repo {
     return content.toString('utf-8');
   }
   async readTree(hash: Hash): Promise<TreeEntry[]> {
-    const { type, content } = await this.readObject(hash);
+    const gito/*{ type, content }*/ = await this.readObject(hash);
+    return Repo.gitObjectToTree(gito);
+  }
+  static async gitObjectToTree({type,content}:GitObject): Promise<TreeEntry[]> {
     if (type !== 'tree') {
       throw new Error(`Expected tree, got ${type}`);
     }
-
     const entries: TreeEntry[] = [];
     let offset = 0;
 
@@ -201,7 +206,10 @@ export class Repo {
     return path.normalize(_path).startsWith(path.normalize(this.workingDir()));
   }
   async readCommit(hash: Hash): Promise<CommitEntry> {
-    const { type, content } = await this.readObject(hash);
+    const gito/*{ type, content }*/ = await this.readObject(hash);
+    return Repo.gitObjectToCommitEntry(gito);
+  }
+  static async gitObjectToCommitEntry({type, content}:GitObject) {
     if (type !== 'commit') {
       throw new Error(`Expected commit, got ${type}`);
     }

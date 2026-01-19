@@ -83,7 +83,7 @@ function downloadObjectsByHashList(string $repo_id, array $hash_list): array {
         ];
     }
 
-    return $result;
+    return ["objects"=>$result];
 }
 
 function downloadObjects(array $data): array {

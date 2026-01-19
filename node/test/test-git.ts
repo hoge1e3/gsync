@@ -1,7 +1,7 @@
 import { Author, Hash, TreeEntry, asLocalRef, asBranchName, asHash, ObjectType, FilePath, asFilePath} from "../src/types.js";
 import * as assert from "assert";
 import { IgnoreChecker, RecursiveGitIgnore, Repo } from "../src/git.js";
-import { Sync } from "../src/sync.js";
+import { Sync, SyncFactory } from "../src/sync.js";
 import { clone, commit, log, sync } from "../src/cmd.js";
 import { sha1Hex } from "../src/codec.js";
 import _crypto from 'crypto';
@@ -10,8 +10,15 @@ const localRef_main = asLocalRef(branch_main);
 import * as path from "path";
 import * as fs from "fs";
 import { FileBasedObjectStore, ObjectEntry } from "../src/objects.js";
+import { factory as offlineObjectStoreFactory } from "../src/objects.js";
+async function offlineRepo(gitDir:FilePath) {
+    const objectStore=await offlineObjectStoreFactory(gitDir);
+    const repo=new Repo(gitDir,objectStore);
+    return repo;
+}
+
 export async function testIgnoreCheckerAtRandom() {
-    const repo=new Repo(asFilePath(("../.gsync")));
+    const repo=await offlineRepo(asFilePath(("../.gsync")));
     const igc=new IgnoreChecker(repo);
     const allfiles=new Set<FilePath>();
     const walk=(dir:FilePath)=>{
@@ -57,7 +64,7 @@ export async function testIgnoreCheckerAtRandom() {
 }
 
 export async function testIgnoreChecker() {
-    const repo=new Repo(asFilePath(("../.gsync")));
+    const repo=await offlineRepo(asFilePath(("../.gsync")));
     const igc=new IgnoreChecker(repo);
     const walk=(dir:FilePath)=>{
         //console.log("ig",ig);
@@ -83,7 +90,7 @@ export async function testIgnoreChecker() {
     return;
 }
 export async function testHash2(){
-    const repo=new Repo(asFilePath("../.gsync"));
+    const repo=await offlineRepo(asFilePath("../.gsync"));
     let ig=new RecursiveGitIgnore();
     const walk=(dir:FilePath)=>{
         ig=ig.pushed(dir);
@@ -143,7 +150,7 @@ async function writeObject(type: ObjectType, content: Buffer): Promise<Hash> {
     return hash;
 }
 export async function testHash(){
-    const repo=new Repo(asFilePath(".git"));
+    const repo=await offlineRepo(asFilePath(".git"));
     //const obj=await repo.readObject("00d6602b2832d060ad2a2f26c4b5bd957aa2dde8");
     //console.log(obj.type, obj.content);
     const curCommitHash=await repo.readHead(localRef_main);
@@ -205,10 +212,10 @@ async function testSync_fetch() {
 
 }*/
 async function test_clone(name="clonetes") {
-    const repo=new Sync(asFilePath("js/test/fixture/dotgit"));
+    const repof=new SyncFactory(asFilePath("js/test/fixture/dotgit"));
     /*await Sync.clone(asPath("js/test/fixture/clonetes"), await repo.readConfig() , branch_main );
     */
-   const conf=await repo.readConfig();
+   const conf=await repof.readConfig();
    await clone("js/test/fixture/"+name, conf.serverUrl, conf.repoId);
 }
 async function test_commit(name="clonetes") {
@@ -234,7 +241,7 @@ async function testObjectStore(){
         console.log("iter1", e.hash, e.content.byteLength, e.mtime);
     }
     const s2=new FileBasedObjectStore(asFilePath("../cotest/.gsync/objects2"), asFilePath("../cotest/.gsync/remote-state.json"));
-    s2.put(all[0].hash, all[0].content);
+    s2.put(all[0].hash, all[0].content,false);
     const val=await s2.get(all[0].hash);
     const c=val.content;
     if (c.byteLength!==all[0].content.byteLength){

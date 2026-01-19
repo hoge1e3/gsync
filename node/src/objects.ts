@@ -1,8 +1,9 @@
-import { asFilePath, asHash, asPHPTimestamp, Config, FilePath, Hash, State } from "./types.js";
+import { asFilePath, asHash, asPHPTimestamp, APIConfig, FilePath, Hash, State } from "./types.js";
 import * as path from "path";
 import * as fs from "fs";
 import MutablePromise from "mutable-promise";
 import { DB_PREFIX, REMOTE_CONF_FILE, REMOTE_STATE_FILE, STATE_STORE_NAME, STORE_NAME } from "./constants.js";
+import { dateToPhpTimestamp, phpTimestampToDate } from "./util.js";
 export type ObjectValue = {
     content: Uint8Array;
     mtime: Date;
@@ -14,17 +15,27 @@ const STATE_ID="state";
 export interface ObjectStore {
     has(hash: Hash): Promise<boolean>;
     get(hash: Hash): Promise<ObjectValue>;
-    put(hash: Hash, compressed: Uint8Array): Promise<void>;
+    // downloaded = set mtime less than last upload
+    put(hash: Hash, compressed: Uint8Array, downloaded:boolean): Promise<void>;
     iterate(since: Date): AsyncGenerator<ObjectEntry>;
     getState():Promise<State>;
     setState(state:State):Promise<void>;
+}
+async function mtimeOnPut(store:ObjectStore, downloaded:boolean){
+    if (downloaded) {
+        const state=await store.getState();
+        const r=asPHPTimestamp(state.uploadSince-10);
+        if (r<0) return new Date(0);
+        return phpTimestampToDate(r);
+    }
+    return new Date();
 }
 export async function factory(gitDir:FilePath):Promise<ObjectStore>{
     const objdir = asFilePath(path.join(gitDir, 'objects'));
     const stateFile = asFilePath(path.join(gitDir, REMOTE_STATE_FILE));
     if (globalThis.indexedDB && !fs.existsSync(objdir)) {
         const conffile = asFilePath(path.join(gitDir, REMOTE_CONF_FILE));
-        const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as Config;
+        const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as APIConfig;
         return new IndexedDBBasedObjectStore(DB_PREFIX+"_"+conf.repoId, stateFile);
     } else {
         return new FileBasedObjectStore(objdir, stateFile);   
@@ -89,8 +100,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
         const cursor=await reqP(store.openCursor());
         if (!cursor) {
             return {
-                downloadSince: asPHPTimestamp(0),
-                uploadSince: asPHPTimestamp(0),
+                //downloadSince: asPHPTimestamp(0),
+                uploadSince: dateToPhpTimestamp(new Date()),
             };
         }
         return cursor.value;
@@ -133,11 +144,13 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
             request.onerror = () => reject(request.error);
         });
     }
-    async put(hash: Hash, compressed: Uint8Array): Promise<void> {
+    async put(hash: Hash, compressed: Uint8Array, downloaded:boolean): Promise<void> {
         await this.dbInit;
+        const state=await this.getState();
+        const mtime=await mtimeOnPut(this,downloaded);
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction(STORE_NAME, "readwrite");
-            const value:ObjectValue = { content: compressed, mtime: new Date() };
+            const value:ObjectValue = { content: compressed, mtime};
             const store = transaction.objectStore(STORE_NAME);
             const request = store.put(value, hash);
             request.onsuccess = () => resolve();
@@ -189,8 +202,8 @@ export class FileBasedObjectStore implements ObjectStore {
     async getState(): Promise<State> {
         if (!fs.existsSync(this.stateFile)) {
             return {
-                downloadSince: asPHPTimestamp(0),
-                uploadSince: asPHPTimestamp(0),
+                //downloadSince: asPHPTimestamp(0),
+                uploadSince: dateToPhpTimestamp(new Date()),
             };
         }
         return JSON.parse(await fs.promises.readFile(this.stateFile, "utf-8"));
@@ -215,7 +228,7 @@ export class FileBasedObjectStore implements ObjectStore {
         }
         return {content:fs.readFileSync(filePath), mtime: fs.statSync(filePath).mtime};
     }
-    async put(hash: Hash, compressed: Uint8Array) {
+    async put(hash: Hash, compressed: Uint8Array,downloaded:boolean) {
         // saves raw(compressed) Uint8Array to object file
         const filePath = this.pathOf(hash);
         const dirPath = path.dirname(filePath);
@@ -223,6 +236,9 @@ export class FileBasedObjectStore implements ObjectStore {
             fs.mkdirSync(dirPath, { recursive: true });
         }
         fs.writeFileSync(filePath, compressed);
+        const state=await this.getState();
+        const mtime=await mtimeOnPut(this,downloaded);
+        fs.utimesSync(filePath,mtime,mtime);
     }
     async *iterate(since: Date): AsyncGenerator<ObjectEntry> {
         // iterate newer or equals than since

@@ -1,75 +1,78 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { asHash, BranchName, Hash,FilePath, asFilePath, State, Config, IgnoreState, GitObject, asPHPTimestamp } from './types.js';
-import { factory, maxMtime, ObjectStore,ObjectEntry } from './objects.js';
-import { REMOTE_CONF_FILE, REMOTE_STATE_FILE } from './constants.js';
-import { dateToPhpTimestamp, phpTimestampToDate, toBase64 } from './util.js';
-import { PHPClient, WebServerApi } from './webapi.js';
+import { BranchName, Hash,FilePath, asFilePath, State, APIConfig} from './types.js';
+import { ObjectStore,ObjectEntry, ObjectValue, factory as objectStoreFactory } from './objects.js';
+import { REMOTE_CONF_FILE } from './constants.js';
+import { dateToPhpTimestamp, phpTimestampToDate } from './util.js';
+import { PHPClientFactory, WebApi } from './webapi.js';
+import { Repo } from './git.js';
 
 export const GIT_DIR_NAME=".gsync";
-export class Sync {
-    _objectStore: ObjectStore|undefined;
-    _webapi: WebServerApi|undefined;
-    constructor(public gitDir: FilePath) { 
-    }
-    async getObjectStore(): Promise<ObjectStore> {
-        if (this._objectStore) return this._objectStore;
-        this._objectStore=await factory(this.gitDir);
-        return this._objectStore;
-    }
-    async getWebApi():Promise<WebServerApi> {
-        if (this._webapi) return this._webapi;
-        const config=await this.readConfig();
-        this._webapi=new PHPClient(
-            config.serverUrl,
-            config.repoId,
-            config.apiKey,
-        );
-        return this._webapi;
-    }
-    async init(serverUrl: string):Promise<string> {
-        if (fs.existsSync(this.gitDir)) {
-            throw new Error("Cannot init: "+this.gitDir+" already exists.");
-        }
-        const apiKey=Math.random().toString(36).slice(2);
-        this._webapi=new PHPClient(
-            serverUrl, 
-            "init",
-            apiKey,
-        );
-        // invoke create command (see /php/index.php)
-        // and return new repository id
-        const data = await this._webapi.createRepository();
-        // and write Config
-        const conf: Config = {
-            serverUrl,
-            repoId: data.repo_id,
-            apiKey: Math.random().toString(36).slice(2) ,
-        };
-        await fs.promises.mkdir(this.gitDir, { recursive: true });
-        await this.writeConfig(conf);
-        return data.repo_id;
-    }
-    async readConfig(): Promise<Config> {
+const apiFactory=new PHPClientFactory();// TODO: firebase etc.
+export class SyncFactory {
+    constructor(public gitDir: FilePath){}
+    async readConfig(): Promise<APIConfig> {
         const conffile = this.confFile();
-        const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as Config;
+        const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as APIConfig;
         if (!conf.apiKey) {
             conf.apiKey=Math.random().toString(36).slice(2);
             await this.writeConfig(conf);
         }
         return conf;
     }
-    async writeConfig(conf:Config): Promise<void> {
+    async writeConfig(conf:APIConfig): Promise<void> {
         const conffile = this.confFile();
         await fs.promises.writeFile(conffile, JSON.stringify(conf));
     }
     private confFile() {
         return asFilePath(path.join(this.gitDir, REMOTE_CONF_FILE));
     }
+    async init(serverUrl: string):Promise<Sync>{
+        const gitDir=this.gitDir;
+        if (fs.existsSync(gitDir)) {
+            throw new Error("Cannot init: "+gitDir+" already exists.");
+        }
+        const api=await apiFactory.init(serverUrl);
+        const offlineStore=await objectStoreFactory(gitDir);
+        const downloadableStore=new DownloadableObjectStore(offlineStore,api);
+        const sync=new Sync(this,gitDir, downloadableStore, api);
 
+        const conf: APIConfig = api.config;
+        await fs.promises.mkdir(gitDir, { recursive: true });
+        await this.writeConfig(conf);
+        return sync;
+    }
+    async load():Promise<Sync>{
+        const gitDir=this.gitDir;
+        if (!fs.existsSync(gitDir)) {
+            throw new Error("Cannot load: "+gitDir+" does not exist.");
+        }
+        const conf=await this.readConfig();
+        const api=await apiFactory.load(conf);
+        const offlineStore=await objectStoreFactory(gitDir);
+        const downloadableStore=new DownloadableObjectStore(offlineStore,api);
+        return new Sync(this,gitDir, downloadableStore, api);
+    }
+}
+export class Sync {
+    //_objectStore: ObjectStore|undefined;
+    //_webapi: WebApi<APIConfig>|undefined;
+    repo:Repo;
+    constructor(
+        public factory: SyncFactory,
+        public gitDir: FilePath, 
+        public objectStore:ObjectStore,
+        public webapi:WebApi<APIConfig>) {
+            this.repo=new Repo(gitDir, objectStore);
+    }
+    async getObjectStore(): Promise<ObjectStore> {
+        return this.objectStore;
+    }
+    async getWebApi():Promise<WebApi<APIConfig>> {
+        return this.webapi;
+    }
     async readState(): Promise<State> {
         return await (await this.getObjectStore()).getState();
-        
     }
     async writeState(state: State) {
         return await (await this.getObjectStore()).setState(state);
@@ -88,10 +91,13 @@ export class Sync {
         }
         const api=await this.getWebApi();
         const newest = await api.uploadObjects(objects);
-        await this.writeState({ uploadSince: newUploadSince, downloadSince: state.downloadSince });
+        await this.writeState({ uploadSince: newUploadSince, /*downloadSince: state.downloadSince*/ });
         console.log(`Uploaded ${objects.length} objects. Server timestamp:`, newest/*res.data.timestamp*/);
     }
-    async downloadObjects(ignoreState:IgnoreState="none"): Promise<void> {
+    readConfig(){
+        return this.factory.readConfig();
+    }
+    /*async downloadObjects(ignoreState:IgnoreState="none"): Promise<void> {
         const state = await this.readState();
         const api=await this.getWebApi();
         const since=  ignoreState==="all" ? new Date(0):
@@ -114,7 +120,7 @@ export class Sync {
         
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
-    }
+    }*/
     async hasRemoteHead(branch: BranchName):Promise<boolean> {
         const api=await this.getWebApi();
         const data = await api.hasHead(branch);
@@ -135,5 +141,51 @@ export class Sync {
     async addRemoteHead(branch: BranchName, next:Hash): Promise<void> {
         const api=await this.getWebApi();
         await api.addHead(branch, next);
+    }
+}
+
+export class DownloadableObjectStore implements ObjectStore {
+    constructor(public offline:ObjectStore, public api:WebApi<APIConfig>){}
+    has(hash: Hash): Promise<boolean> {
+        // in offline
+        return this.offline.has(hash);
+    }
+    async get(hash: Hash): Promise<ObjectValue> {
+        if (await this.offline.has(hash)) return this.offline.get(hash);
+        const first=(await this.api.downloadObjects([hash]))[0];
+        if (!first) throw new Error(this.api+": "+hash+" is not found.");
+        const gito=await Repo.objectEntryToGitObject(first);
+        if (gito.type==="tree") {
+            const trees=await Repo.gitObjectToTree(gito);
+            const hashes=trees.map((e)=>e.hash);
+            const toBeDownloaded=[] as Hash[];
+            for (let hash of hashes) {
+                if (await this.offline.has(hash)) continue;
+                toBeDownloaded.push(hash);
+            }
+            const downloaded=await this.api.downloadObjects(toBeDownloaded);// TODO: use mutablePromise
+            for (let e of downloaded) {
+                await this.put(e.hash, e.content,true);
+            }
+        }/* else if (gito.type==="commit") {
+            const come=await Repo.gitObjectToCommitEntry(gito);
+            await this.get(come.tree);// TODO: use mutablePromise
+        }*/
+        await this.put(hash, first.content,true);
+        return first;
+    }
+    put(hash: Hash, compressed: Uint8Array, downloaded:boolean): Promise<void> {
+        // upload is manual
+        return this.offline.put(hash,compressed,downloaded);
+    }
+    iterate(since: Date): AsyncGenerator<ObjectEntry> {
+        // in offline
+        return this.offline.iterate(since);
+    }
+    getState(): Promise<State> {
+        return this.offline.getState();
+    }
+    setState(state: State): Promise<void> {
+        return this.offline.setState(state);
     }
 }

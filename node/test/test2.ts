@@ -6,7 +6,13 @@ import * as assert from "assert";
 import { Repo } from "../src/git.js";
 import { commit, clone, sync, init, syncWithRetry } from "../src/cmd.js";
 import { asFilePath, asBranchName, asLocalRef, isHash, FilePath, Hash } from "../src/types.js";
-import { GIT_DIR_NAME, Sync } from "../src/sync.js";
+import { GIT_DIR_NAME, Sync, SyncFactory } from "../src/sync.js";
+import { factory as offlineObjectStoreFactory } from "../src/objects.js";
+async function offlineRepo(gitDir:FilePath) {
+    const objectStore=await offlineObjectStoreFactory(gitDir);
+    const repo=new Repo(gitDir,objectStore);
+    return repo;
+}
 
 const mainBranch = asBranchName("main");
 const mainRef = asLocalRef(mainBranch);
@@ -20,12 +26,12 @@ function write(file: string, content: string) {
 async function initRepo(dir: string): Promise<Sync> {
   fs.mkdirSync(dir, { recursive: true });
   await init(dir, serverUrl,GIT_DIR_NAME );
-  const sync = new Sync(asFilePath(path.join(dir, GIT_DIR_NAME)));
-  return sync;
+  const syncf = new SyncFactory(asFilePath(path.join(dir, GIT_DIR_NAME)));
+  return await syncf.load();
 }
 async function getCurrentTreeHash(dir: FilePath): Promise<Hash> {
   //const sync = new Sync(asFilePath(path.join(dir, GIT_DIR_NAME)));
-  const repo = new Repo(asFilePath(path.join(dir, GIT_DIR_NAME)));
+  const repo = await offlineRepo(asFilePath(path.join(dir, GIT_DIR_NAME)));
   const commitHash=(await repo.readHead(asLocalRef(await repo.getCurrentBranchName())) )!;
   const commitObj=await repo.readCommit(commitHash);
   return commitObj.tree;
@@ -83,7 +89,8 @@ export async function test_scenario_basic_sync() {
   //assert.ok(isHash(secondTree), "second commit should exist");
   assert.equal(secondTree,"8c2151c1341ae06d3cd449a34ad26c96d2bfe0f2","second tree hash should match");
 
-  const sync_clone=new Sync(asFilePath(path.join(cloneDir,GIT_DIR_NAME)));
+  const sync_clonef=new SyncFactory(asFilePath(path.join(cloneDir,GIT_DIR_NAME)));
+  const sync_clone=await sync_clonef.load();
   assert.ok( await sync_clone.hasRemoteHead(mainBranch), " has remote head should be set" );
   //
   // 5) clone → remote に push
