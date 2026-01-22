@@ -22,13 +22,15 @@ export interface ObjectStore {
     setState(state:State):Promise<void>;
 }
 async function mtimeOnPut(store:ObjectStore, downloaded:boolean){
+    const state=await store.getState();
     if (downloaded) {
-        const state=await store.getState();
         const r=asPHPTimestamp(state.uploadSince-10);
         if (r<0) return new Date(0);
         return phpTimestampToDate(r);
+    } else {
+        const r=asPHPTimestamp(state.uploadSince+10);
+        return phpTimestampToDate(r);
     }
-    return new Date();
 }
 export async function factory(gitDir:FilePath):Promise<ObjectStore>{
     const objdir = asFilePath(path.join(gitDir, 'objects'));
@@ -96,13 +98,15 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
     }
     async getState(): Promise<State> {
         await this.dbInit;
-        const store=singleStoreTransaction(this.db!, STATE_STORE_NAME,"readonly");
+        const store=singleStoreTransaction(this.db!, STATE_STORE_NAME);
         const cursor=await reqP(store.openCursor());
         if (!cursor) {
-            return {
+            const newstate:State={
                 //downloadSince: asPHPTimestamp(0),
-                uploadSince: dateToPhpTimestamp(new Date()),
+                uploadSince: asPHPTimestamp(dateToPhpTimestamp(new Date())-10),
             };
+            await reqP(store.put(newstate, STATE_ID));
+            return newstate;
         }
         return cursor.value;
     }
@@ -146,7 +150,6 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
     }
     async put(hash: Hash, compressed: Uint8Array, downloaded:boolean): Promise<void> {
         await this.dbInit;
-        const state=await this.getState();
         const mtime=await mtimeOnPut(this,downloaded);
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction(STORE_NAME, "readwrite");
@@ -201,10 +204,12 @@ export class FileBasedObjectStore implements ObjectStore {
     }
     async getState(): Promise<State> {
         if (!fs.existsSync(this.stateFile)) {
-            return {
+            const newstate:State={
                 //downloadSince: asPHPTimestamp(0),
-                uploadSince: dateToPhpTimestamp(new Date()),
+                uploadSince: asPHPTimestamp(dateToPhpTimestamp(new Date())-10),
             };
+            await fs.promises.writeFile(this.stateFile, JSON.stringify(newstate));
+            return newstate;
         }
         return JSON.parse(await fs.promises.readFile(this.stateFile, "utf-8"));
     }
