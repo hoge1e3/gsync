@@ -32,13 +32,16 @@ async function mtimeOnPut(store:ObjectStore, downloaded:boolean){
         return phpTimestampToDate(r);
     }
 }
-export async function factory(gitDir:FilePath):Promise<ObjectStore>{
+export async function factory(gitDir:FilePath, repoId?:string):Promise<ObjectStore>{
     const objdir = asFilePath(path.join(gitDir, 'objects'));
     const stateFile = asFilePath(path.join(gitDir, REMOTE_STATE_FILE));
     if (globalThis.indexedDB && !fs.existsSync(objdir)) {
-        const conffile = asFilePath(path.join(gitDir, REMOTE_CONF_FILE));
-        const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as APIConfig;
-        return new IndexedDBBasedObjectStore(DB_PREFIX+"_"+conf.repoId, stateFile);
+        if (!repoId) {
+            const conffile = asFilePath(path.join(gitDir, REMOTE_CONF_FILE));
+            const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as APIConfig;
+            repoId=conf.repoId;
+        }
+        return new IndexedDBBasedObjectStore(DB_PREFIX+"_"+repoId, stateFile);
     } else {
         return new FileBasedObjectStore(objdir, stateFile);   
     }

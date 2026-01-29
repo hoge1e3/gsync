@@ -33,7 +33,7 @@ export class SyncFactory {
             throw new Error("Cannot init: "+gitDir+" already exists.");
         }
         const api=await apiFactory.init(serverUrl);
-        const offlineStore=await objectStoreFactory(gitDir);
+        const offlineStore=await objectStoreFactory(gitDir, api.repoId);
         const downloadableStore=new DownloadableObjectStore(offlineStore,api);
         const sync=new Sync(this,gitDir, downloadableStore, api);
 
