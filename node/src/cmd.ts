@@ -204,9 +204,15 @@ export async function commit(dir: string):Promise<Hash> {
         console.log(branch,": Nothing changed");
         return curCommitHash!;
     }
+    let isMobile:RegExpMatchArray|null=null;
+    try{
+      isMobile=navigator.userAgent.match(/iphone|android/i);
+    }catch(e){
+    }
+    const author=new Author(isMobile?isMobile+"":"test","test@example.com");    
     const newCommitHash=await repo.writeCommit({
-        author: new Author("test","test@example.com"),
-        committer: new Author("test","test@example.com"),
+        author,
+        committer: author,
         parents: [...curCommitHash?[curCommitHash]:[], ...MERGE_HEAD? [MERGE_HEAD]:[]],
         message: new Date()+"",
         tree: newCommitTreeHash
