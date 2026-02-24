@@ -11,6 +11,9 @@ import { inflate, deflate ,sha1Hex } from './codec.js';
 import { ObjectEntry, ObjectStore } from './objects.js';
 /*const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);*/
+import { getSplashScreen } from "./splash.js";
+const splashScreen=await getSplashScreen();
+
 export class Repo {
   //_objectStore:ObjectStore|undefined;
   constructor(public gitDir: FilePath, public objectStore:ObjectStore) {
@@ -543,6 +546,7 @@ export class Repo {
       if (diff.type === 'deleted') {
         await fs.promises.rm(filePath, { force: true });
       } else if (diff.type === 'added' || diff.type === 'modified') {
+        splashScreen.show("Write "+filePath);
         if (!diff.newHash) throw new Error(`Missing 'other' hash for ${diff.path}`);
         const { type, content } = await this.readObject(diff.newHash);
         if (type !== 'blob') throw new Error(`Expected blob, got ${type} for ${diff.path}`);

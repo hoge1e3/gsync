@@ -4,8 +4,10 @@ import { DownloadableObjectStore, GIT_DIR_NAME, Sync, SyncFactory } from "./sync
 import { APIConfig, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, Author, BranchName, FilePath, Hash, SyncStatus, Conflicted, CloneOptions, ConflictResolutionPolicy, IgnoreState } from "./types.js";
 import * as fs from "fs";
 import { factory as offlineObjectStoreFactory} from "./objects.js";
-
+import { getSplashScreen } from "./splash.js";
+const splashScreen=await getSplashScreen();
 export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
+  try{
     // 1st command line arg is either clone commit sync
     // call corresponding function
     const [,, command, ...args] = argv;
@@ -59,6 +61,7 @@ export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
         default:
             throw new Error(`Unknown command: ${command}`);
     }
+  }finally {splashScreen.hide();} 
 }
 export async function scan(cwd:string, 
 showRepo:boolean, showUrl:boolean, 
@@ -209,7 +212,7 @@ export async function commit(dir: string):Promise<Hash> {
       isMobile=navigator.userAgent.match(/iphone|android/i);
     }catch(e){
     }
-    const author=new Author(isMobile?isMobile+"":"test","test@example.com");    
+    const author=new Author(isMobile?isMobile+"":"pc","test@example.com");    
     const newCommitHash=await repo.writeCommit({
         author,
         committer: author,
@@ -243,7 +246,7 @@ export async function syncWithRetry(dir: string,
 }*/
 export async function sync(dir: string, 
     conflictResolutionPolicy:ConflictResolutionPolicy):Promise<SyncStatus> {
-
+    splashScreen.show("Commit");
     const localCommitHash=await commit(dir);
     const gitDir = findGitDir(asFilePath(dir));
     const syncf=new SyncFactory(gitDir);
@@ -252,6 +255,7 @@ export async function sync(dir: string,
     const branch=await repo.getCurrentBranchName();
     if (!await sync.hasRemoteHead(branch)) {
         // push to remote(new)
+        splashScreen.show("Upload objects");
         await sync.uploadObjects();
         console.log("Push ",branch, " into ", localCommitHash);
         await sync.addRemoteHead(branch, localCommitHash);
@@ -266,6 +270,7 @@ export async function sync(dir: string,
             console.log("Remote is up-to-date: ",localCommitHash);
             return "no_changes";
         }
+        splashScreen.show("Upload objects");
         await sync.uploadObjects();
         console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
         await sync.setRemoteHead(branch, remoteCommitHash, localCommitHash);
