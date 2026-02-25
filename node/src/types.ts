@@ -4,13 +4,13 @@ export function asPHPTimestamp(t:number) {
     return t as PHPTimestamp;
 }
 const SymHash=Symbol("hash");
-export type Config = {
+export type APIConfig = { // TODO: firebase?
     serverUrl: string,
     repoId: string,
     apiKey: string,
 };
 export type State = {
-    downloadSince: PHPTimestamp,
+    //downloadSince: PHPTimestamp,
     uploadSince: PHPTimestamp,
 };
 export type IgnoreState=

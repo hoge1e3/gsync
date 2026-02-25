@@ -1,48 +1,62 @@
-import { ObjectEntry, ObjectStore } from './objects.js';
-import { asHash, BranchName, GitObject, Hash, PHPTimestamp } from './types.js';
+import { ObjectEntry } from './objects.js';
+import { asHash, BranchName, APIConfig, Hash, PHPTimestamp } from './types.js';
 import { dateToPhpTimestamp, phpTimestampToDate, toBase64 } from './util.js';
 
-/**
- * Interface exposing dedicated methods with separate parameters (no args object).
- */
-export interface WebServerApi {
-  repoId: string;
-  //objectStore: ObjectStore;
-  createRepository(): Promise<{ repo_id: string }>;
+export interface WebApiFactory<I,C,W extends WebApi<C>>{
+  init(initializer:I): Promise<W>;
+  load(config:C): Promise<W>;
+}
+export interface WebApi<C> {
+  config: C;
+  //createRepository(): Promise<{ repo_id: string }>;
   setHead(branch: BranchName, current:Hash, next: Hash): Promise<void>;
   addHead(branch: BranchName, next: Hash): Promise<void>;
   hasHead(branch: BranchName): Promise<boolean>;
   getHead(branch: BranchName): Promise<Hash>;
   uploadObjects(objects: ObjectEntry[]): Promise<Date>;
-  downloadObjects(since?: Date): Promise<{objects:ObjectEntry[],newest:Date}>;
+  //downloadSince(since?: Date): Promise<{objects:ObjectEntry[],newest:Date}>;
+  downloadObjects(hashList: Hash[]): Promise<ObjectEntry[]>;
 }
 type Actions="create"|"upload"|"download"|"get_head"|"set_head";
 type StringifiedObject={ hash: Hash; content: string, mtime?:PHPTimestamp };
-export class PHPClient implements WebServerApi {
+export class PHPClientFactory implements WebApiFactory<string, APIConfig, PHPClient>{
+  async init(serverUrl: string): Promise<PHPClient> {
+    const api_key= Math.random().toString(36).slice(2);
+    const res = await post(serverUrl, "create", {api_key});
+    return new PHPClient(serverUrl, res.repo_id, api_key);
+  }
+  async load({serverUrl, repoId, apiKey}: APIConfig): Promise<PHPClient> {
+    return new PHPClient(serverUrl, repoId, apiKey);
+  }
+}
+async function post(serverUrl:string,action: Actions, data: any) {
+  const response = await fetch(`${serverUrl}?action=${action}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (response.status !== 200) {
+    throw new Error(await response.text());
+  }
+  return await response.json();
+}
+export class PHPClient implements WebApi<APIConfig> {
+  config: APIConfig;
   constructor(
     public serverUrl: string,
     public repoId: string,
     public apiKey: string,
-    //public objectStore: ObjectStore,
-  ) {}
-
-  private async post(action: Actions, data: any) {
-    const response = await fetch(`${this.serverUrl}?action=${action}`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-
-    if (response.status !== 200) {
-      throw new Error(await response.text());
-    }
-    return await response.json();
+  ) {this.config={serverUrl,repoId,apiKey};}
+  toString(){
+    return `[${this.serverUrl}: ${this.repoId}]`;
   }
-
-  async createRepository(): Promise<{ repo_id: string }> {
+  private post(action: Actions, data: any) {
+    return post(this.serverUrl, action,data); 
+  }
+  /*async createRepository(): Promise<{ repo_id: string }> {
     const res = await this.post("create", { api_key: this.apiKey });
     this.repoId = res.repo_id;
     return res;
-  }
+  }*/
 
   async addHead(branch: BranchName, next: Hash): Promise<void> {
     const data=await this.post("set_head", {
@@ -103,7 +117,7 @@ export class PHPClient implements WebServerApi {
     return phpTimestampToDate(data.timestamp);
   }
 
-  async downloadObjects(since:Date): Promise<{objects:ObjectEntry[],newest:Date}> {
+  async downloadSince(since:Date): Promise<{objects:ObjectEntry[],newest:Date}> {
     const res = await this.post("download", {
       repo_id: this.repoId,
       api_key: this.apiKey,
@@ -112,22 +126,26 @@ export class PHPClient implements WebServerApi {
     const sObjects=res.objects as StringifiedObject[];
     const objects: ObjectEntry[]=[];
     const newDownloadSince = phpTimestampToDate(res.newest);
-    //const objectStore=this.objectStore;
-    //let downloaded=0, skipped=0;
     for (const { hash, content, mtime } of sObjects) {
       asHash(hash);
       const mtimed= mtime? phpTimestampToDate(mtime):new Date();
       objects.push({ hash, content: Buffer.from(content, 'base64'), mtime:mtimed });
-        /*downloaded++;
-        if (await objectStore.has(hash)) {
-            skipped++;
-        } else {
-            const binary = Buffer.from(content, 'base64');
-            await objectStore.put(hash,  binary);
-        }*/
     }
     return {objects,newest:newDownloadSince};
-    //console.log(downloaded," objects downloaded. ",skipped," objects skipped.");
-    //return newDownloadSince;
+  }
+  async downloadObjects(hashList: Hash[]): Promise<ObjectEntry[]> {
+    const res = await this.post("download", {
+      repo_id: this.repoId,
+      api_key: this.apiKey,
+      hash_list: hashList,
+    });
+    const sObjects=res.objects as StringifiedObject[];
+    const objects: ObjectEntry[]=[];
+    for (const { hash, content, mtime } of sObjects) {
+      asHash(hash);
+      const mtimed= mtime? phpTimestampToDate(mtime):new Date();
+      objects.push({ hash, content: Buffer.from(content, 'base64'), mtime:mtimed });
+    }
+    return objects;
   }
 }

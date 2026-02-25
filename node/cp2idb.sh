@@ -1,0 +1,1 @@
+cp js/src/* ../../idb/run/node_modules/@acepad/gsync/js/src/
