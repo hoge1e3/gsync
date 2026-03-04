@@ -462,6 +462,7 @@ export class Repo {
 
     for (const entry of entries) {
       const outPath = asFilePath(path.join(dirPath, entry.name));
+      splashScreen.show(outPath);
 
       if (entry.mode === '40000') {
         // ディレクトリ（tree）→ 再帰的に処理
