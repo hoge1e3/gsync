@@ -184,6 +184,7 @@ export function findGitDir(cwd: FilePath):FilePath {
         c=nc;
     }
 }
+let verbose=false;
 export async function commit(dir: string):Promise<Hash> {
     const gitDir = findGitDir(asFilePath(dir));
     // even commit is failed unless online 
@@ -197,11 +198,11 @@ export async function commit(dir: string):Promise<Hash> {
     const ref=asLocalRef(branch);
     const tree=await repo.buildTreeFromWorkingDir();
     const curCommitHash = await repo.readHead(ref);
-    console.log("curCommitHash", curCommitHash);
+    if (verbose) console.log("curCommitHash", curCommitHash);
     // even commit is failed unless online 
     const curCommit = curCommitHash ? await repo.readCommit(curCommitHash) : null;
     const newCommitTreeHash=await repo.writeTree(tree);
-    console.log("newCommitTreeHash", newCommitTreeHash);
+    if (verbose) console.log("newCommitTreeHash", newCommitTreeHash);
     const MERGE_HEAD=await repo.readMergeHead();
     if (!MERGE_HEAD && curCommit && curCommit.tree===newCommitTreeHash) {
         console.log(branch,": Nothing changed");
@@ -221,7 +222,7 @@ export async function commit(dir: string):Promise<Hash> {
         tree: newCommitTreeHash
     });
     if (MERGE_HEAD) await repo.writeMergeHead();
-    console.log("New commit for", branch, ": ",newCommitHash);
+    if (verbose) console.log("New commit for", branch, ": ",newCommitHash);
     await repo.updateHead(ref, newCommitHash);
     return newCommitHash;
 }
@@ -257,7 +258,7 @@ export async function sync(dir: string,
         // push to remote(new)
         splashScreen.show("Upload objects");
         await sync.uploadObjects();
-        console.log("Push ",branch, " into ", localCommitHash);
+        if (verbose) console.log("Push ",branch, " into ", localCommitHash);
         await sync.addRemoteHead(branch, localCommitHash);
         return "newly_pushed";
     }
@@ -272,7 +273,7 @@ export async function sync(dir: string,
         }
         splashScreen.show("Upload objects");
         await sync.uploadObjects();
-        console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
+        if (verbose) console.log("Push into remote: ",remoteCommitHash, " to ",localCommitHash);
         await sync.setRemoteHead(branch, remoteCommitHash, localCommitHash);
         return "pushed";
     }
@@ -295,10 +296,10 @@ export async function sync(dir: string,
     await repo.writeMergeHead(remoteCommitHash);
     await repo.applyDiff(toA);
     if (conflicts.length==0) {
-        console.log("Auto-Merged from ",remoteCommit);
+        console.log("Auto-Merged from ",remoteCommitHash);
         const mergedCommitHash=await commit(dir);
-        console.log("Merged commit hash: ",mergedCommitHash);
-        console.log("Run sync again to push merged commit");      
+        if (verbose) console.log("Merged commit hash: ",mergedCommitHash);
+        if (verbose) console.log("Run sync again to push merged commit");       
         return "auto_merged"; 
     } else {
         let confpaths:Conflicted=[];
@@ -333,10 +334,10 @@ export async function sync(dir: string,
             console.log("Resolve conflicts and run sync again");
             return confpaths;
         } else {
-            console.log("Auto-Merged from ",remoteCommit);
+            console.log("Auto-Merged from ",remoteCommitHash);
             const mergedCommitHash=await commit(dir);
-            console.log("Merged commit hash: ",mergedCommitHash);
-            console.log("Run sync again to push merged commit");       
+            if (verbose) console.log("Merged commit hash: ",mergedCommitHash);
+            if (verbose) console.log("Run sync again to push merged commit");       
             return "auto_merged"; 
         }
     }

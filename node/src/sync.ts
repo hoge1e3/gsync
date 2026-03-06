@@ -9,6 +9,7 @@ import { Repo } from './git.js';
 
 export const GIT_DIR_NAME=".gsync";
 const apiFactory=new PHPClientFactory();// TODO: firebase etc.
+let verbose=false;
 export class SyncFactory {
     constructor(public gitDir: FilePath){}
     async readConfig(): Promise<APIConfig> {
@@ -131,7 +132,7 @@ export class Sync {
     async getRemoteHead(branch: BranchName): Promise<Hash> {
         const api=await this.getWebApi();
         const hash = await api.getHead(branch);
-        console.log(`HEAD of '${branch}': ${hash ?? '(not set)'}`);
+        if (verbose) console.log(`HEAD of '${branch}': ${hash ?? '(not set)'}`);
         return hash;
     }
     async setRemoteHead(branch: BranchName, current:Hash, next:Hash): Promise<void> {
