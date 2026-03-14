@@ -91,7 +91,7 @@ export async function test_scenario_basic_sync() {
 
   const sync_clonef=new SyncFactory(asFilePath(path.join(cloneDir,GIT_DIR_NAME)));
   const sync_clone=await sync_clonef.load();
-  assert.ok( await sync_clone.hasRemoteHead(mainBranch), " has remote head should be set" );
+  assert.ok( await sync_clone.getRemoteHead(mainBranch), " has remote head should be set" );
   //
   // 5) clone → remote に push
   //

@@ -11,8 +11,8 @@ export interface WebApi<C> {
   //createRepository(): Promise<{ repo_id: string }>;
   setHead(branch: BranchName, current:Hash, next: Hash): Promise<void>;
   addHead(branch: BranchName, next: Hash): Promise<void>;
-  hasHead(branch: BranchName): Promise<boolean>;
-  getHead(branch: BranchName): Promise<Hash>;
+  //hasHead(branch: BranchName): Promise<boolean>;
+  getHead(branch: BranchName): Promise<Hash|null>;
   uploadObjects(objects: ObjectEntry[]): Promise<Date>;
   //downloadSince(since?: Date): Promise<{objects:ObjectEntry[],newest:Date}>;
   downloadObjects(hashList: Hash[]): Promise<ObjectEntry[]>;
@@ -84,7 +84,7 @@ export class PHPClient implements WebApi<APIConfig> {
   }
 
 
-  async hasHead(branch: BranchName): Promise<boolean> {
+  /*async hasHead(branch: BranchName): Promise<boolean> {
     const res = await this.post("get_head", {
       repo_id: this.repoId,
       branch,
@@ -92,15 +92,15 @@ export class PHPClient implements WebApi<APIConfig> {
       api_key: this.apiKey,
     });
     return !!res.hash;
-  }
-  async getHead(branch: BranchName): Promise<Hash> {
+  }*/
+  async getHead(branch: BranchName): Promise<Hash|null> {
     const res = await this.post("get_head", {
       repo_id: this.repoId,
       branch,
-      allow_nonexistent: 0,
+      allow_nonexistent: 1,
       api_key: this.apiKey,
     });
-    return asHash(res.hash);
+    return res.hash ? asHash(res.hash) : null;
   }
 
   async uploadObjects(objects: ObjectEntry[]): Promise<Date> {

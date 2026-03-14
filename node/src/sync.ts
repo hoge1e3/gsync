@@ -122,14 +122,14 @@ export class Sync {
         await this.writeState({ uploadSince: state.uploadSince, downloadSince: newDownloadSince });
 
     }*/
-    async hasRemoteHead(branch: BranchName):Promise<boolean> {
+    /*async hasRemoteHead(branch: BranchName):Promise<boolean> {
         const api=await this.getWebApi();
-        const data = await api.hasHead(branch);
-        return data;
-    }
+        const data = await api.getHead(branch);
+        return !!data;
+    }*/
 
 
-    async getRemoteHead(branch: BranchName): Promise<Hash> {
+    async getRemoteHead(branch: BranchName): Promise<Hash|null> {
         const api=await this.getWebApi();
         const hash = await api.getHead(branch);
         if (verbose) console.log(`HEAD of '${branch}': ${hash ?? '(not set)'}`);

@@ -165,6 +165,7 @@ async function _clone(into:FilePath, config:APIConfig,  branch: BranchName, opti
     const repo=newSync.repo;//new Repo(newGitDir);
     //await newSync.downloadObjects();
     const headCommitHash=await newSync.getRemoteHead(branch);
+    if (!headCommitHash) throw new Error("No remote head on "+branch);
     repo.updateHead(asLocalRef(branch), headCommitHash );
     if (!skipco) {
         const headCommit=await repo.readCommit(headCommitHash);
@@ -254,7 +255,9 @@ export async function sync(dir: string,
     const sync=await syncf.load();
     const repo=sync.repo;//new Repo(gitDir);
     const branch=await repo.getCurrentBranchName();
-    if (!await sync.hasRemoteHead(branch)) {
+    splashScreen.show("Check Remote head");
+    const remoteCommitHash=await sync.getRemoteHead(branch);
+    if (!remoteCommitHash) {
         // push to remote(new)
         splashScreen.show("Upload objects");
         await sync.uploadObjects();
@@ -262,7 +265,6 @@ export async function sync(dir: string,
         await sync.addRemoteHead(branch, localCommitHash);
         return "newly_pushed";
     }
-    const remoteCommitHash=await sync.getRemoteHead(branch);
     //await sync.downloadObjects();
     const baseCommitHash=await repo.findMergeBase(localCommitHash, remoteCommitHash);
     if (remoteCommitHash===baseCommitHash) {
