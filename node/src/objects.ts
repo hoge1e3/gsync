@@ -2,7 +2,7 @@ import { asFilePath, asHash, asPHPTimestamp, APIConfig, FilePath, Hash, State } 
 import * as path from "path";
 import * as fs from "fs";
 import MutablePromise from "mutable-promise";
-import { DB_PREFIX, REMOTE_CONF_FILE, REMOTE_STATE_FILE, STATE_STORE_NAME, STORE_NAME } from "./constants.js";
+import { DB_PREFIX, FMT_STORE_NAME, REMOTE_CONF_FILE, REMOTE_STATE_FILE, STATE_STORE_NAME, STORE_NAME } from "./constants.js";
 import { dateToPhpTimestamp, phpTimestampToDate } from "./util.js";
 export type ObjectValue = {
     content: Uint8Array;
@@ -20,6 +20,7 @@ export interface ObjectStore {
     iterate(since: Date): AsyncGenerator<ObjectEntry>;
     getState():Promise<State>;
     setState(state:State):Promise<void>;
+    getFMTStorage():FMTStorage|undefined;
 }
 async function mtimeOnPut(store:ObjectStore, downloaded:boolean){
     const state=await store.getState();
@@ -64,12 +65,22 @@ export function singleStoreTransaction(db:IDBDatabase, table:string, mode:IDBTra
     const store = transaction.objectStore(table);
     return store;
 }
+export interface FMTEntry{
+    hash: Hash;
+    mtime: number;
+}
+export interface FMTStorage {
+    // This interface need not check fmtime
+    get(path: string):Promise<FMTEntry|null>;
+    clear(path:string):Promise<void>;
+    set(path: string, hash:FMTEntry):Promise<void>;
+}
 export class IndexedDBBasedObjectStore implements ObjectStore {
     private db: IDBDatabase | null = null;
     dbInit=new MutablePromise<IDBDatabase>();
     constructor(public dbName: string, public stateFile: FilePath) {
         // Initialize IndexedDB
-        const request = indexedDB.open(dbName,2);
+        const request = indexedDB.open(dbName,3);
         request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
             const db = (event.target as IDBOpenDBRequest).result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -77,6 +88,9 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
             }
             if (!db.objectStoreNames.contains(STATE_STORE_NAME)) {
                 db.createObjectStore(STATE_STORE_NAME);
+            }
+            if (!db.objectStoreNames.contains(FMT_STORE_NAME)) {
+                db.createObjectStore(FMT_STORE_NAME);
             }
         };
         request.onsuccess = async (event: Event) => {
@@ -195,6 +209,28 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
             yield r;
         }            
     }
+    getFMTStorage(): FMTStorage  {
+        const self=this;
+        return {
+            async get(path: string): Promise<FMTEntry | null> {
+                await self.dbInit;
+                const store=singleStoreTransaction(self.db!, FMT_STORE_NAME);
+                const res=await reqP(store.get(path));
+                if(!res) return null;
+                return res as FMTEntry;
+            },
+            async clear(path: string): Promise<void> {
+                await self.dbInit;
+                const store=singleStoreTransaction(self.db!, FMT_STORE_NAME);
+                await reqP(store.delete(path));                
+            },
+            async set(path: string, value: FMTEntry): Promise<void> {
+                await self.dbInit;
+                const store=singleStoreTransaction(self.db!, FMT_STORE_NAME);
+                await reqP(store.put(value, path));
+            }
+        };
+    }
     /*
     IndexedDB-based object store
     */
@@ -267,5 +303,7 @@ export class FileBasedObjectStore implements ObjectStore {
             }
         }
     }
-
+    getFMTStorage(): FMTStorage | undefined {
+        return undefined;
+    }
 }

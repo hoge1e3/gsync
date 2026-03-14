@@ -3,4 +3,4 @@ export const REMOTE_STATE_FILE="remote-state.json";
 export const DB_PREFIX="gsync";
 export const STORE_NAME="objects";
 export const STATE_STORE_NAME="remote-state";
-
+export const FMT_STORE_NAME="fine-mtime-cache";

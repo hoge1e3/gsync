@@ -8,7 +8,7 @@ import ignore, { Ignore } from 'ignore';
 //import { promisify } from 'util';
 import { asFilename, asHash, asMode, Author, Ref, CommitEntry, Conflict, GitObject, Hash, isObjectType, ObjectType, TreeDiffEntry, TreeEntry, BranchName, asBranchName, asLocalRef, PathInRepo, FilePath, asFilePath, asPathInRepo } from './types.js';
 import { inflate, deflate ,sha1Hex } from './codec.js';
-import { ObjectEntry, ObjectStore } from './objects.js';
+import { FMTStorage, ObjectEntry, ObjectStore } from './objects.js';
 /*const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);*/
 import { getSplashScreen } from "./splash.js";
@@ -17,6 +17,7 @@ const splashScreen=await getSplashScreen();
 export class Repo {
   //_objectStore:ObjectStore|undefined;
   constructor(public gitDir: FilePath, public objectStore:ObjectStore) {
+
   }
   async getObjectStore(): Promise<ObjectStore> {
     return this.objectStore;
@@ -150,6 +151,37 @@ export class Repo {
     const content = this.encodeTree(entries);
     return await this.writeObject('tree', content);
   }
+  async getFMTStorage():Promise<FMTStorage|undefined>{
+    return (await this.getObjectStore()).getFMTStorage();
+  }
+  async setHashToFMT(path:FilePath, hash:Hash) {
+    const fms=await this.getFMTStorage();
+    if (!fms)return;
+    const stat=await fs.promises.lstat(path);
+    if (!(stat as any).hasFineMtime) {
+      return;
+    }
+    const mtime=stat.mtimeMs;
+    await fms.set(path,{hash,mtime});
+  }
+  async getHashFromFMT(path:FilePath):Promise<Hash|null>{
+    const fms=await this.getFMTStorage();
+    if (!fms)return null;
+    const stat=await fs.promises.lstat(path);
+    if (!(stat as any).hasFineMtime) {
+      fms.clear(path);
+      return null;
+    }
+    const mtime_current=stat.mtimeMs;
+    const ent=await fms.get(path)
+    if (!ent) return null;
+    const {hash,mtime}=ent;
+    if (mtime!==mtime_current){
+      fms.clear(path);
+      return null;
+    }
+    return hash;
+  }
 
   async buildTreeFromWorkingDir(): Promise<TreeEntry[]> {
     const workingDir = this.workingDir();
@@ -187,10 +219,16 @@ export class Repo {
 
             entries.push({ mode: '100644', name, hash });
           } else if (file.isDirectory() && !this.isSubRepo(fullPath)) {
-            const childEntries = await walk(fullPath);
-            const treeHash = await this.writeTree(childEntries);
-            //console.log("Dir" , fullPath, treeHash);
-            entries.push({ mode: '40000', name, hash: treeHash });
+            const fmt_treeHash= await this.getHashFromFMT(fullPath);
+            if (fmt_treeHash) {
+              entries.push({ mode: '40000', name, hash: fmt_treeHash });
+            } else {
+              const childEntries = await walk(fullPath);
+              const treeHash = await this.writeTree(childEntries);
+              //console.log("Dir" , fullPath, treeHash);
+              entries.push({ mode: '40000', name, hash: treeHash });
+              await this.setHashToFMT(fullPath, treeHash);
+            }
           }
         }
         return entries;

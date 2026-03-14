@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { BranchName, Hash,FilePath, asFilePath, State, APIConfig} from './types.js';
-import { ObjectStore,ObjectEntry, ObjectValue, factory as objectStoreFactory } from './objects.js';
+import { ObjectStore,ObjectEntry, ObjectValue, factory as objectStoreFactory, FMTStorage } from './objects.js';
 import { REMOTE_CONF_FILE } from './constants.js';
 import { dateToPhpTimestamp, phpTimestampToDate } from './util.js';
 import { PHPClientFactory, WebApi } from './webapi.js';
@@ -147,6 +147,9 @@ export class Sync {
 
 export class DownloadableObjectStore implements ObjectStore {
     constructor(public offline:ObjectStore, public api:WebApi<APIConfig>){}
+    getFMTStorage(): FMTStorage | undefined {
+        return this.offline.getFMTStorage();
+    }
     has(hash: Hash): Promise<boolean> {
         // in offline
         return this.offline.has(hash);
