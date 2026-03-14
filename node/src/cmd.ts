@@ -248,15 +248,16 @@ export async function syncWithRetry(dir: string,
 }*/
 export async function sync(dir: string, 
     conflictResolutionPolicy:ConflictResolutionPolicy):Promise<SyncStatus> {
-    splashScreen.show("Commit");
-    const localCommitHash=await commit(dir);
     const gitDir = findGitDir(asFilePath(dir));
     const syncf=new SyncFactory(gitDir);
     const sync=await syncf.load();
     const repo=sync.repo;//new Repo(gitDir);
     const branch=await repo.getCurrentBranchName();
-    splashScreen.show("Check Remote head");
-    const remoteCommitHash=await sync.getRemoteHead(branch);
+    splashScreen.show("Commit");
+    const [remoteCommitHash,localCommitHash]:
+        [Hash|null,Hash]=await Promise.all([
+        sync.getRemoteHead(branch), commit(dir)
+    ]);
     if (!remoteCommitHash) {
         // push to remote(new)
         splashScreen.show("Upload objects");
