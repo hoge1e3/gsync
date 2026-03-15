@@ -70,7 +70,7 @@ export class Repo {
       return hash;
     }
     const compressed = await deflate(store);
-    objectStore.put(hash, compressed, false);
+    await objectStore.put(hash, compressed, false);
 
     /*const filePath = this.getObjectPath(hash);
     if (fs.existsSync(filePath)) {
@@ -169,7 +169,7 @@ export class Repo {
     if (!fms)return null;
     const stat=await fs.promises.lstat(path);
     if (!(stat as any).hasFineMtime) {
-      fms.clear(path);
+      await fms.clear(path);
       return null;
     }
     const mtime_current=stat.mtimeMs;
@@ -177,7 +177,7 @@ export class Repo {
     if (!ent) return null;
     const {hash,mtime}=ent;
     if (mtime!==mtime_current){
-      fms.clear(path);
+      await fms.clear(path);
       return null;
     }
     return hash;
@@ -500,7 +500,7 @@ export class Repo {
 
     for (const entry of entries) {
       const outPath = asFilePath(path.join(dirPath, entry.name));
-      splashScreen.show(outPath);
+      await splashScreen.show(outPath);
 
       if (entry.mode === '40000') {
         // ディレクトリ（tree）→ 再帰的に処理
@@ -548,9 +548,9 @@ export class Repo {
   async writeMergeHead(commitHash?: Hash) {
     const MERGE_HEAD=path.join(this.gitDir, "MERGE_HEAD");
     if (commitHash) {
-      fs.promises.writeFile(MERGE_HEAD, commitHash);
+      await fs.promises.writeFile(MERGE_HEAD, commitHash);
     } else {
-      fs.promises.rm(MERGE_HEAD);
+      await fs.promises.rm(MERGE_HEAD);
     }
   }
   realGitRepoIsSubRepo():boolean{
@@ -585,11 +585,11 @@ export class Repo {
       if (diff.type === 'deleted') {
         await fs.promises.rm(filePath, { force: true });
       } else if (diff.type === 'added' || diff.type === 'modified') {
-        splashScreen.show("Write "+filePath);
+        await splashScreen.show("Write "+filePath);
         if (!diff.newHash) throw new Error(`Missing 'other' hash for ${diff.path}`);
         const { type, content } = await this.readObject(diff.newHash);
         if (type !== 'blob') throw new Error(`Expected blob, got ${type} for ${diff.path}`);
-        writeFileIgnoreingCRLF(filePath, content);
+        await writeFileIgnoreingCRLF(filePath, content);
       }
     }
   }

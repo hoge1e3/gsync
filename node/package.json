@@ -2,6 +2,7 @@
     "name": "@acepad/gsync",
     "description": "git-like sync tool for AcePad",
     "scripts": {
+        "tsc": "npx tsc",
         "build": "npx tsc",
         "test": "npm run build && node js/test/test2.js",
         "cp": "bash cp2idb.sh"
@@ -13,9 +14,13 @@
     "version": "1.0.3",
     "type": "module",
     "devDependencies": {
-        "@types/web": "^0.0.278",
         "@types/node": "^24.7.2",
-        "typescript": "^5.8.3"
+        "@types/web": "^0.0.278",
+        "@typescript-eslint/eslint-plugin": "^8.57.0",
+        "@typescript-eslint/parser": "^8.57.0",
+        "eslint": "^10.0.3",
+        "typescript": "^5.8.3",
+        "typescript-eslint": "^8.57.0"
     },
     "dependencies": {
         "ignore": "^7.0.5",

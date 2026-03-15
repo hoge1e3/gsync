@@ -241,7 +241,7 @@ async function testObjectStore(){
         console.log("iter1", e.hash, e.content.byteLength, e.mtime);
     }
     const s2=new FileBasedObjectStore(asFilePath("../cotest/.gsync/objects2"), asFilePath("../cotest/.gsync/remote-state.json"));
-    s2.put(all[0].hash, all[0].content,false);
+    await s2.put(all[0].hash, all[0].content,false);
     const val=await s2.get(all[0].hash);
     const c=val.content;
     if (c.byteLength!==all[0].content.byteLength){
