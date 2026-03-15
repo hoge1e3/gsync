@@ -355,17 +355,53 @@ function makePostfix<T extends string>(filepath:T, postfix:string):T {
     const newBasename = `${basename}${postfix}${ext}`;
     return path.join(dirname, newBasename) as T;
 }
-export async function log(dir: string) {
+export async function log(dir: string, check_ref=false) {
     
     const gitDir = findGitDir(asFilePath(dir));
     const repo=await offlineRepo(gitDir);
     const b=await repo.getCurrentBranchName();
     let ch=await repo.readHead(asLocalRef(b));
-    while (ch) {
-        const c=await repo.readCommit(ch);
-        console.log(ch, c);
-        ch=c.parents[0];
-        if (c.parents[1]) console.log("Skipped merge commit: ",c.parents[1]);
+    if (!ch) return;
+    let c=await repo.readCommit(ch);
+    while (c) {
+        console.log(ch, c.message);
+        if (check_ref) console.log("Scanned objects: ",await checkRef(repo, ch));
+        let next:CommitEntry|undefined;
+        for (let canh of c.parents) {
+            try {
+                const can=await repo.readCommit(canh);
+                if (!next || can.author.date.getTime()>next.author.date.getTime()) {
+                    next=can;
+                    ch=canh;
+                }
+            }catch(e) {
+                console.error(e);
+            }
+        }
+        c=next!;
+        //if (c.parents[1]) console.log("Skipped merge commit: ",c.parents[1]);
+    }
+}
+export async function checkRef(repo:Repo, chash:Hash) {
+    const obj=await repo.readCommit(chash);
+    return await tree(obj.tree);
+    async function tree(hash: Hash, _path="./"){
+        let c=0;
+        try {
+            const treeo=await repo.readTree(hash);
+            for (let entry of treeo) {
+                if (entry.mode === '40000') {
+                    // dir
+                    c+=await tree(entry.hash, path.join(_path,entry.name));
+                } else {
+                    const blob=await repo.readObject(entry.hash);
+                    c++;
+                }
+            }
+        } catch (e) {
+            console.error("Missing "+chash+" "+_path);
+        }
+        return c;
     }
 }
 
