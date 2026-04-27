@@ -4,3 +4,4 @@ export const DB_PREFIX="gsync";
 export const STORE_NAME="objects";
 export const STATE_STORE_NAME="remote-state";
 export const FMT_STORE_NAME="fine-mtime-cache";
+export const GSYNC_CONFLICT_DIR=".gsync-conflicts";

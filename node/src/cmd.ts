@@ -5,6 +5,7 @@ import { APIConfig, asBranchName, asFilePath, asHash, asLocalRef, asPathInRepo, 
 import * as fs from "fs";
 import { factory as offlineObjectStoreFactory} from "./objects.js";
 import { getSplashScreen } from "./splash.js";
+import { GSYNC_CONFLICT_DIR } from "./constants.js";
 const splashScreen=await getSplashScreen();
 export async function main(cwd=process.cwd(), argv=process.argv):Promise<any> {
   try{
@@ -324,10 +325,11 @@ export async function sync(dir: string,
                     null;
                 if (winner===null) {
                     const postfix=`(${remoteCommitHash.substring(0,8)})`;
-                    const postfixedPath = makePostfix(localPath, postfix);
+                    const postfixedPath = conflictedFile(repo, localPath, postfix);
                     confpaths.push(repo.toPathInRepo(postfixedPath));
                     if (confpaths.length==1) console.log("CONFLICT");
                     console.log(`Conflict saved at ${postfixedPath}`);
+                    fs.mkdirSync(path.dirname(postfixedPath),{recursive:true});
                     fs.writeFileSync(postfixedPath, remoteObj.content);
                 } else if (winner==="remote") {
                     console.log(`Overwrite ${localPath}`); 
@@ -348,6 +350,16 @@ export async function sync(dir: string,
             return "auto_merged"; 
         }
     }
+}
+function conflictedFile(repo: Repo, filePath:FilePath, postfix:string):FilePath {
+    const work=repo.workingDir();
+    if (!fs.existsSync(path.join(work, GSYNC_CONFLICT_DIR))) {
+        return makePostfix(filePath,postfix);
+    }
+    const rel=path.relative(work, filePath);
+    if (rel.startsWith("..")) throw new Error(`${filePath} is out of ${work}`);
+    const dst=makePostfix( path.join(work, GSYNC_CONFLICT_DIR, rel) as FilePath,postfix);
+    return dst;
 }
 function makePostfix<T extends string>(filepath:T, postfix:string):T {
     // ex: filepath = "/a/b/test.txt"  postfix = "(1)"
