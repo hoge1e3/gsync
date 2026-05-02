@@ -36,7 +36,8 @@ export function asHash(s:string) {
   return s;
 }
 //const SymMode=Symbol("mode");
-export type Mode="40000"|"100644";
+export type Mode="40000"|"100644"|"120000";
+export type NonDirMode="100644"|"120000";
 export function isMode(s: string): s is Mode {
   return /^[0-9]+$/.test(s);  
 }
@@ -114,11 +115,11 @@ export function isObjectType(type: string): type is ObjectType {
 export type TreeDiffEntry = {
   path: PathInRepo;
 } & ({ 
-    type: "added", newHash: Hash,
+    type: "added", newHash: Hash, newMode: NonDirMode,
 }|{ 
     type: "modified", oldHash: Hash, newHash: Hash,
 }|{ 
-    type: "deleted", oldHash: Hash
+    type: "deleted", oldHash: Hash,
 });
 /*
 ;
@@ -129,7 +130,7 @@ export type TreeDiffEntry = {
 
 // src/repo.ts の先頭付近
 export type TreeEntry = {
-  mode: Mode;         // e.g. "100644" or "40000"
+  mode: Mode;         // e.g. "100644" or "40000" or "120000"
   name: Filename;         // ファイル名 or ディレクトリ名
   hash: Hash;         // SHA-1 ハッシュ（hex文字列）
 };

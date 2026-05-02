@@ -15,6 +15,7 @@ import { getSplashScreen } from "./splash.js";
 const splashScreen=await getSplashScreen();
 
 export class Repo {
+  ignoreSymlink=true;
   //_objectStore:ObjectStore|undefined;
   constructor(public gitDir: FilePath, public objectStore:ObjectStore) {
 
@@ -218,6 +219,13 @@ export class Repo {
             //console.log("File" , fullPath, hash);
 
             entries.push({ mode: '100644', name, hash });
+          } else if (file.isSymbolicLink()) {
+            if (this.ignoreSymlink) continue;
+            const link = await fs.promises.readlink(fullPath);
+            const content = Buffer.from(link, 'utf-8'); // Gitはリンク先パスをそのままblobにする
+            const hash = await this.writeObject('blob', content);
+            console.log("Symlink in tree", name, content, link);
+            entries.push({ mode: '120000', name, hash }); // ← これを追加
           } else if (file.isDirectory() && !this.isSubRepo(fullPath)) {
             const fmt_treeHash= await this.getHashFromFMT(fullPath);
             if (fmt_treeHash) {
@@ -413,32 +421,51 @@ export class Repo {
           const subDiffs = await this.diffTreeRecursive(baseSub, [], relPath);
           diffs.push(...subDiffs);
         } else {
-          diffs.push({ path: relPath, type: 'deleted', oldHash: oldEnt.hash });
+          diffs.push({ path: relPath, type: 'deleted', oldHash: oldEnt.hash,});
         }
       } else if (!oldEnt && newEnt) {
-        // 追加
+        // (*A)追加(same as *B)
         if (newEnt.mode === '40000') {
-          const otherSub = await this.readTree(newEnt.hash);
-          const subDiffs = await this.diffTreeRecursive([], otherSub, relPath);
+          const newSub = await this.readTree(newEnt.hash);
+          const subDiffs = await this.diffTreeRecursive([], newSub, relPath);
           diffs.push(...subDiffs);
         } else {
-          diffs.push({ path: relPath, type: 'added', newHash: newEnt.hash });
+          diffs.push({ path: relPath, type: 'added', newHash: newEnt.hash, newMode:newEnt.mode });
         }
       } else if (oldEnt && newEnt) {
         if (oldEnt.mode === '40000' && newEnt.mode === '40000') {
           // ディレクトリどうし → 再帰
-          const baseSub = await this.readTree(oldEnt.hash);
-          const otherSub = await this.readTree(newEnt.hash);
-          const subDiffs = await this.diffTreeRecursive(baseSub, otherSub, relPath);
+          const oldSub = await this.readTree(oldEnt.hash);
+          const newSub = await this.readTree(newEnt.hash);
+          const subDiffs = await this.diffTreeRecursive(oldSub, newSub, relPath);
           diffs.push(...subDiffs);
         } else if (oldEnt.hash !== newEnt.hash) {
-          // ファイルが変更
-          diffs.push({
-            path: relPath,
-            type: 'modified',
-            oldHash: oldEnt.hash,
-            newHash: newEnt.hash
-          });
+          if (oldEnt.mode === '100644' && newEnt.mode === '100644') {
+            // 通常ファイルが変更
+            diffs.push({
+              path: relPath,
+              type: 'modified',
+              oldHash: oldEnt.hash,
+              newHash: newEnt.hash,
+            });
+          } else {
+            // 種類が違う場合、削除→追加
+            if (oldEnt.mode==='40000') {
+              const oldSub = await this.readTree(oldEnt.hash);
+              const subDiffs = await this.diffTreeRecursive(oldSub,[], relPath);
+              diffs.push(...subDiffs);
+            } else {
+              diffs.push({type:"deleted",path:relPath, oldHash: oldEnt.hash});
+            }
+            // (*B)追加(same as *A)
+            if (newEnt.mode === '40000') {
+              const newSub = await this.readTree(newEnt.hash);
+              const subDiffs = await this.diffTreeRecursive([], newSub, relPath);
+              diffs.push(...subDiffs);
+            } else {
+              diffs.push({ path: relPath, type: 'added', newHash: newEnt.hash, newMode:newEnt.mode });
+            }
+          }
         }
         // else: hash が同じ → 無視
       }
@@ -506,6 +533,15 @@ export class Repo {
         // ディレクトリ（tree）→ 再帰的に処理
         await fs.promises.mkdir(outPath, { recursive: true });
         await this.checkoutTreeToDir(entry.hash, outPath);
+      } else if (entry.mode === '120000') {
+        if (this.ignoreSymlink) continue;
+        const { type, content } = await this.readObject(entry.hash);
+        if (type !== 'blob') {
+          throw new Error(`Unexpected object type ${type} for symlink ${entry.name}`);
+        }
+        const link = content.toString('utf-8');
+        console.log("checked out Symlink", link, outPath);
+        await fs.promises.symlink(link, outPath,"junction");
       } else {
         // blob → ファイルとして書き出す
         const { type, content } = await this.readObject(entry.hash);
@@ -577,7 +613,9 @@ export class Repo {
     const igc=new IgnoreChecker(this);
     for (const diff of diffs) {
       const filePath = asFilePath(path.join(workDir, diff.path));
-      if (await this.hasSymlinkInPath(filePath)) {
+      const filePathParent= asFilePath(path.dirname(filePath));
+      // do not skip symlink itself
+      if (await this.hasSymlinkInPath(filePathParent)) {
         continue;
       }
       if (igc.ignores(filePath)) continue;
@@ -589,7 +627,19 @@ export class Repo {
         if (!diff.newHash) throw new Error(`Missing 'other' hash for ${diff.path}`);
         const { type, content } = await this.readObject(diff.newHash);
         if (type !== 'blob') throw new Error(`Expected blob, got ${type} for ${diff.path}`);
-        await writeFileIgnoreingCRLF(filePath, content);
+        if (diff.type === 'added' && diff.newMode==="120000") {
+          if (this.ignoreSymlink) continue;
+          const linkTarget = content.toString('utf-8'); // ★必須
+          console.log("Writing symlink:", {
+            target: linkTarget,
+            path: filePath
+          });
+          await fs.promises.symlink(linkTarget, filePath);
+          //console.log("Writing symlink into ",filePath);
+          //await fs.promises.symlink(content, filePath, "junction");
+        } else {
+          await writeFileIgnoreingCRLF(filePath, content);
+        }
       }
     }
   }
