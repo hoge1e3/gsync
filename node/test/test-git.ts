@@ -19,9 +19,9 @@ async function offlineRepo(gitDir:FilePath) {
 
 export async function testIgnoreCheckerAtRandom() {
     const repo=await offlineRepo(asFilePath(("../.gsync")));
-    const igc=new IgnoreChecker(repo);
+    const igc=await IgnoreChecker.init(repo);
     const allfiles=new Set<FilePath>();
-    const walk=(dir:FilePath)=>{
+    const walk=async (dir:FilePath)=>{
         //console.log("ig",ig);
         const files = fs.readdirSync(dir, { withFileTypes: true });
         for (const file of files) {
@@ -35,14 +35,14 @@ export async function testIgnoreCheckerAtRandom() {
                 throw new Error("node!!  .git!! "+fullPath);
             }*/
             if (fs.statSync(fullPath).isDirectory()){
-                walk(fullPath);
+                await walk(fullPath);
             } else {
                 allfiles.add(fullPath);
                 //console.log(fullPath);
             }
         }
     };
-    walk(repo.workingDir());
+    await walk(repo.workingDir());
     const shuffled=[...allfiles].sort(()=>Math.random()-0.5);
     let ct=0,cf=0;
     for (let s of shuffled) {
@@ -65,13 +65,13 @@ export async function testIgnoreCheckerAtRandom() {
 
 export async function testIgnoreChecker() {
     const repo=await offlineRepo(asFilePath(("../.gsync")));
-    const igc=new IgnoreChecker(repo);
-    const walk=(dir:FilePath)=>{
+    const igc=await IgnoreChecker.init(repo);
+    const walk=async (dir:FilePath)=>{
         //console.log("ig",ig);
         const files = fs.readdirSync(dir, { withFileTypes: true });
         for (const file of files) {
             const fullPath = asFilePath(path.join(dir, file.name));
-            if (igc.ignores(fullPath)) {
+            if (await igc.ignores(fullPath)) {
                 console.log("Ignores" ,fullPath);
                 continue;
             }
@@ -80,20 +80,20 @@ export async function testIgnoreChecker() {
                 throw new Error("node!!  .git!! "+fullPath);
             }
             if (fs.statSync(fullPath).isDirectory()){
-                walk(fullPath);
+                await walk(fullPath);
             } else {
                 console.log(fullPath);
             }
         }
     };
-    walk(repo.workingDir());
+    await walk(repo.workingDir());
     return;
 }
 export async function testHash2(){
     const repo=await offlineRepo(asFilePath("../.gsync"));
     let ig=new RecursiveGitIgnore();
-    const walk=(dir:FilePath)=>{
-        ig=ig.pushed(dir);
+    const walk=async (dir:FilePath)=>{
+        ig=await ig.pushed(dir);
         //console.log("ig",ig);
         const files = fs.readdirSync(dir, { withFileTypes: true });
         for (const file of files) {
@@ -107,14 +107,14 @@ export async function testHash2(){
                 throw new Error("node!!");
             }
             if (fs.statSync(fullPath).isDirectory()){
-                walk(fullPath);
+                await walk(fullPath);
             } else {
                 console.log(fullPath);
             }
         }
-        ig=ig.poped();
+        ig=await ig.poped();
     };
-    walk(asFilePath(path.dirname(repo.gitDir)));
+    await walk(asFilePath(path.dirname(repo.gitDir)));
     return;
 
     const obj1=await repo.readObject(asHash("4b4a31ee8f73a2aad9045b32e996a5762e575982"));
