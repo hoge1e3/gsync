@@ -73,17 +73,6 @@ export class Repo {
     }
     const compressed = await deflate(store);
     await objectStore.put(hash, compressed, false);
-
-    /*const filePath = this.getObjectPath(hash);
-    if (fs.existsSync(filePath)) {
-      return hash; // 既に存在する場合はそのまま返す
-    }
-    const dirPath = path.dirname(filePath);
-    await fs.promises.mkdir(dirPath, { recursive: true });
-
-    const compressed = await deflate(store);
-    await fs.promises.writeFile(filePath, compressed);
-    */
     return hash;
   }
 
