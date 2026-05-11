@@ -216,7 +216,7 @@ export class Repo {
             const hash = await this.writeObject('blob', content);
             console.log("Symlink in tree", name, content, link);
             entries.push({ mode: '120000', name, hash }); // ← これを追加
-          } else if (file.isDirectory() && !this.isSubRepo(fullPath)) {
+          } else if (file.isDirectory() && !await this.isSubRepo(fullPath)) {
             const fmt_treeHash= await this.getHashFromFMT(fullPath);
             if (fmt_treeHash) {
               entries.push({ mode: '40000', name, hash: fmt_treeHash });

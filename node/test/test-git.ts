@@ -46,7 +46,7 @@ export async function testIgnoreCheckerAtRandom() {
     const shuffled=[...allfiles].sort(()=>Math.random()-0.5);
     let ct=0,cf=0;
     for (let s of shuffled) {
-        const ib=igc.ignores(s);
+        const ib=await igc.ignores(s);
         if (ib) {
             if (ct<25) {
                 ct++;

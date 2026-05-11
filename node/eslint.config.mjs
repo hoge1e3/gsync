@@ -4,6 +4,11 @@ import tsParser from "@typescript-eslint/parser";
 
 export default defineConfig([
   {
+    ignores: [
+        "**/*.d.ts"
+    ],
+  },
+  {
     files: ["**/*.ts"],
     languageOptions: {
       parser: tsParser,
@@ -15,7 +20,8 @@ export default defineConfig([
       "@typescript-eslint": tsPlugin
     },
     rules: {
-      "@typescript-eslint/no-floating-promises": "error"
+        "@typescript-eslint/no-floating-promises": "error",
+        "@typescript-eslint/no-misused-promises": "error",
     }
   }
 ]);
