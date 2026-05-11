@@ -1,9 +1,9 @@
-import * as fs from 'fs';
+import {promises as fs} from 'fs';
 import * as path from 'path';
 import { BranchName, Hash,FilePath, asFilePath, State, APIConfig} from './types.js';
 import { ObjectStore,ObjectEntry, ObjectValue, factory as objectStoreFactory, FMTStorage } from './objects.js';
 import { REMOTE_CONF_FILE } from './constants.js';
-import { dateToPhpTimestamp, phpTimestampToDate } from './util.js';
+import { dateToPhpTimestamp, exists, phpTimestampToDate } from './util.js';
 import { PHPClientFactory, WebApi } from './webapi.js';
 import { Repo } from './git.js';
 
@@ -14,7 +14,7 @@ export class SyncFactory {
     constructor(public gitDir: FilePath){}
     async readConfig(): Promise<APIConfig> {
         const conffile = this.confFile();
-        const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as APIConfig;
+        const conf = JSON.parse(await fs.readFile(conffile, { encoding: "utf-8" })) as APIConfig;
         if (!conf.apiKey) {
             conf.apiKey=Math.random().toString(36).slice(2);
             await this.writeConfig(conf);
@@ -23,14 +23,14 @@ export class SyncFactory {
     }
     async writeConfig(conf:APIConfig): Promise<void> {
         const conffile = this.confFile();
-        await fs.promises.writeFile(conffile, JSON.stringify(conf));
+        await fs.writeFile(conffile, JSON.stringify(conf));
     }
     private confFile() {
         return asFilePath(path.join(this.gitDir, REMOTE_CONF_FILE));
     }
     async init(serverUrl: string):Promise<Sync>{
         const gitDir=this.gitDir;
-        if (fs.existsSync(gitDir)) {
+        if (await exists(gitDir)) {
             throw new Error("Cannot init: "+gitDir+" already exists.");
         }
         const api=await apiFactory.init(serverUrl);
@@ -39,13 +39,13 @@ export class SyncFactory {
         const sync=new Sync(this,gitDir, downloadableStore, api);
 
         const conf: APIConfig = api.config;
-        await fs.promises.mkdir(gitDir, { recursive: true });
+        await fs.mkdir(gitDir, { recursive: true });
         await this.writeConfig(conf);
         return sync;
     }
     async load():Promise<Sync>{
         const gitDir=this.gitDir;
-        if (!fs.existsSync(gitDir)) {
+        if (!await exists(gitDir)) {
             throw new Error("Cannot load: "+gitDir+" does not exist.");
         }
         const conf=await this.readConfig();

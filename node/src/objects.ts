@@ -1,9 +1,9 @@
 import { asFilePath, asHash, asPHPTimestamp, APIConfig, FilePath, Hash, State } from "./types.js";
 import * as path from "path";
-import * as fs from "fs";
+import {promises as fs} from "fs";
 import MutablePromise from "mutable-promise";
 import { DB_PREFIX, FMT_STORE_NAME, REMOTE_CONF_FILE, REMOTE_STATE_FILE, STATE_STORE_NAME, STORE_NAME } from "./constants.js";
-import { dateToPhpTimestamp, phpTimestampToDate } from "./util.js";
+import { dateToPhpTimestamp, dirname, exists, phpTimestampToDate } from "./util.js";
 export type ObjectValue = {
     content: Uint8Array;
     mtime: Date;
@@ -36,10 +36,10 @@ async function mtimeOnPut(store:ObjectStore, downloaded:boolean){
 export async function factory(gitDir:FilePath, repoId?:string):Promise<ObjectStore>{
     const objdir = asFilePath(path.join(gitDir, 'objects'));
     const stateFile = asFilePath(path.join(gitDir, REMOTE_STATE_FILE));
-    if (globalThis.indexedDB && !fs.existsSync(objdir)) {
+    if (globalThis.indexedDB && !await exists(objdir)) {
         if (!repoId) {
             const conffile = asFilePath(path.join(gitDir, REMOTE_CONF_FILE));
-            const conf = JSON.parse(await fs.promises.readFile(conffile, { encoding: "utf-8" })) as APIConfig;
+            const conf = JSON.parse(await fs.readFile(conffile, { encoding: "utf-8" })) as APIConfig;
             repoId=conf.repoId;
         }
         return new IndexedDBBasedObjectStore(DB_PREFIX+"_"+repoId, stateFile);
@@ -100,8 +100,8 @@ export class IndexedDBBasedObjectStore implements ObjectStore {
             const countRequest = store.count();
             if (await reqP(countRequest)=== 0) {
                 // read from stateFile
-                if (fs.existsSync(this.stateFile)) {
-                    const state = JSON.parse(fs.readFileSync(this.stateFile, { encoding: "utf-8" })) as State;
+                if (await exists(this.stateFile)) {
+                    const state = JSON.parse(await fs.readFile(this.stateFile, { encoding: "utf-8" })) as State;
                     await reqP(store.add(state, STATE_ID));
                 }
             }
@@ -242,18 +242,18 @@ export class FileBasedObjectStore implements ObjectStore {
     constructor(public path: FilePath, public stateFile:FilePath) {// path to "object" folder inside .git folder
     }
     async getState(): Promise<State> {
-        if (!fs.existsSync(this.stateFile)) {
+        if (!await exists(this.stateFile)) {
             const newstate:State={
                 //downloadSince: asPHPTimestamp(0),
                 uploadSince: asPHPTimestamp(dateToPhpTimestamp(new Date())-10),
             };
-            await fs.promises.writeFile(this.stateFile, JSON.stringify(newstate));
+            await fs.writeFile(this.stateFile, JSON.stringify(newstate));
             return newstate;
         }
-        return JSON.parse(await fs.promises.readFile(this.stateFile, "utf-8"));
+        return JSON.parse(await fs.readFile(this.stateFile, "utf-8"));
     }
     async setState(state: State): Promise<void> {
-        return await fs.promises.writeFile(this.stateFile, JSON.stringify(state));
+        return await fs.writeFile(this.stateFile, JSON.stringify(state));
     }
     private pathOf(hash: Hash): FilePath {
         // returns path to object file
@@ -262,43 +262,43 @@ export class FileBasedObjectStore implements ObjectStore {
     }
     async has(hash: Hash): Promise<boolean> {
         // returns true if object file exists
-        return fs.existsSync(this.pathOf(hash));
+        return await exists(this.pathOf(hash));
     }
     async get(hash: Hash): Promise<ObjectValue> {
         // returns raw(compressed) Uint8Array of object file(no need to decompress/decode content)
         const filePath = this.pathOf(hash);
-        if (!fs.existsSync(filePath)) {
+        if (!await exists(filePath)) {
             throw new Error(`Object ${hash} not found at ${filePath}`);
         }
-        return {content:fs.readFileSync(filePath), mtime: fs.statSync(filePath).mtime};
+        return {content:await fs.readFile(filePath), mtime: (await fs.stat(filePath)).mtime};
     }
     async put(hash: Hash, compressed: Uint8Array,downloaded:boolean) {
         // saves raw(compressed) Uint8Array to object file
         const filePath = this.pathOf(hash);
-        const dirPath = path.dirname(filePath);
-        if (!fs.existsSync(dirPath)) {
-            fs.mkdirSync(dirPath, { recursive: true });
+        const dirPath = dirname(filePath);
+        if (!await exists(dirPath)) {
+            await fs.mkdir(dirPath, { recursive: true });
         }
-        fs.writeFileSync(filePath, compressed);
+        await fs.writeFile(filePath, compressed);
         const state=await this.getState();
         const mtime=await mtimeOnPut(this,downloaded);
-        fs.utimesSync(filePath,mtime,mtime);
+        await fs.utimes(filePath,mtime,mtime);
     }
     async *iterate(since: Date): AsyncGenerator<ObjectEntry> {
         // iterate newer or equals than since
 
-        for (const head2 of fs.readdirSync(this.path)) {
+        for (const head2 of await fs.readdir(this.path)) {
             //head2 is first 2-chars of hash
             if (head2.length!=2) continue;
             const dir = path.join(this.path, head2);
-            if (!fs.statSync(dir).isDirectory()) continue; // skip if not a directory
-            const files = fs.readdirSync(dir);
+            if (!(await fs.stat(dir)).isDirectory()) continue; // skip if not a directory
+            const files = await fs.readdir(dir);
             for (const rest38 of files) {
                 const filePath = path.join(dir, rest38);
-                const stat = fs.statSync(filePath);
+                const stat = await fs.stat(filePath);
                 if (stat.mtime >= since) {
                     const hash = head2 + rest38; // assuming file name is the hash
-                    yield { hash: asHash(hash), content: fs.readFileSync(filePath), mtime: stat.mtime };
+                    yield { hash: asHash(hash), content: await fs.readFile(filePath), mtime: stat.mtime };
                 }
             }
         }

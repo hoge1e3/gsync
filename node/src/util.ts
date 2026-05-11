@@ -24,6 +24,9 @@ export function dateToPhpTimestamp(d:Date):PHPTimestamp {
 export function join(f:FilePath, ...s:string[]) {
     return asFilePath(path.join(f,...s));
 }
+export function dirname(f:FilePath):FilePath {
+    return asFilePath(path.dirname(f));
+}
 export async function exists(f:FilePath):Promise<boolean> {
     try {
         await fs.access(f);
