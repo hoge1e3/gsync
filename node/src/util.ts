@@ -1,6 +1,9 @@
-import { asPHPTimestamp, PHPTimestamp } from "./types.js";
-
+import path from "path";
+import { asFilePath, asPHPTimestamp, FilePath, PHPTimestamp } from "./types.js";
+import {promises as fs} from "fs";
 export function toBase64(content: Uint8Array<ArrayBufferLike>): string {
+    const ca=content as any;
+    if (typeof ca.toBase64==="function") return ca.toBase64();
     if (typeof btoa !== "undefined") {
         let binary = "";
         for (let i = 0; i < content.length; i++) {
@@ -17,4 +20,15 @@ export function phpTimestampToDate(phpts:PHPTimestamp):Date {
 }
 export function dateToPhpTimestamp(d:Date):PHPTimestamp {
     return asPHPTimestamp(Math.floor(d.getTime() / 1000));
+}
+export function join(f:FilePath, ...s:string[]) {
+    return asFilePath(path.join(f,...s));
+}
+export async function exists(f:FilePath):Promise<boolean> {
+    try {
+        await fs.access(f);
+        return true;
+    } catch (e) {
+        return false;
+    }
 }

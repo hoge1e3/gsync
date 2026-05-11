@@ -1,5 +1,5 @@
 // @acepad/git
-import * as fs from 'fs';
+import {promises as fs} from 'fs';
 import * as path from 'path';
 import * as path_typed from "./path_typed.js";
 /*import zlib from 'zlib';
@@ -12,6 +12,7 @@ import { FMTStorage, ObjectEntry, ObjectStore } from './objects.js';
 /*const inflate = promisify(zlib.inflate);
 const deflate = promisify(zlib.deflate);*/
 import { getSplashScreen } from "./splash.js";
+import { exists, join } from './util.js';
 const splashScreen=await getSplashScreen();
 
 export class Repo {
@@ -158,7 +159,7 @@ export class Repo {
   async setHashToFMT(path:FilePath, hash:Hash) {
     const fms=await this.getFMTStorage();
     if (!fms)return;
-    const stat=await fs.promises.lstat(path);
+    const stat=await fs.lstat(path);
     if (!(stat as any).hasFineMtime) {
       return;
     }
@@ -168,7 +169,7 @@ export class Repo {
   async getHashFromFMT(path:FilePath):Promise<Hash|null>{
     const fms=await this.getFMTStorage();
     if (!fms)return null;
-    const stat=await fs.promises.lstat(path);
+    const stat=await fs.lstat(path);
     if (!(stat as any).hasFineMtime) {
       await fms.clear(path);
       return null;
@@ -192,10 +193,10 @@ export class Repo {
     baseig.add(".git");
     baseig.add(dot_gsync);
     const walk = async (dir: FilePath): Promise<TreeEntry[]> => {
-      ig=ig.pushed(dir);
+      ig=await ig.pushed(dir);
       try {
         const entries: TreeEntry[] = [];
-        const files = await fs.promises.readdir(dir, { withFileTypes: true });
+        const files = await fs.readdir(dir, { withFileTypes: true });
         for (const file of files) {
           const name = asFilename(file.name);
           const fullPath = asFilePath(path.join(dir, name));
@@ -213,7 +214,7 @@ export class Repo {
           //const stat = await fs.promises.stat(fullPath);
 
           if (file.isFile()) { // false for symlink
-            const _content = await fs.promises.readFile(fullPath);
+            const _content = await fs.readFile(fullPath);
             const content = stripCR(_content);
             const hash = await this.writeObject('blob', content);
             //console.log("File" , fullPath, hash);
@@ -221,7 +222,7 @@ export class Repo {
             entries.push({ mode: '100644', name, hash });
           } else if (file.isSymbolicLink()) {
             if (this.ignoreSymlink) continue;
-            const link = await fs.promises.readlink(fullPath);
+            const link = await fs.readlink(fullPath);
             const content = Buffer.from(link, 'utf-8'); // Gitはリンク先パスをそのままblobにする
             const hash = await this.writeObject('blob', content);
             console.log("Symlink in tree", name, content, link);
@@ -241,7 +242,7 @@ export class Repo {
         }
         return entries;
       } finally{
-        ig=ig.poped();
+        ig=await ig.poped();
       }
     };
 
@@ -325,9 +326,9 @@ export class Repo {
     return await this.writeObject("commit", this.encodeCommit(entry));
   }
   async readHead(ref: Ref): Promise<Hash|null> {
-    const refPath = path.join(this.gitDir, ref);
-    if (!fs.existsSync(refPath)) return null;
-    const data = await fs.promises.readFile(refPath, 'utf-8');
+    const refPath = join(this.gitDir, ref);
+    if (!await exists(refPath)) return null;
+    const data = await fs.readFile(refPath, 'utf-8');
     const hash = asHash(data.trim());
     return hash;
   }
@@ -354,8 +355,8 @@ export class Repo {
   async updateHead(ref: Ref, hash: Hash): Promise<void> {
     const fullPath = path.join(this.gitDir, ref);
     const dirPath = path.dirname(fullPath);
-    await fs.promises.mkdir(dirPath, { recursive: true });
-    await fs.promises.writeFile(fullPath, hash);
+    await fs.mkdir(dirPath, { recursive: true });
+    await fs.writeFile(fullPath, hash);
   }
   async findMergeBase(commitHashA: Hash, commitHashB: Hash): Promise<Hash> {
     // visitedA と visitedB に各ブランチの履歴を記録
@@ -405,14 +406,14 @@ export class Repo {
     const newMap = new Map(newTree.map(e => [e.name, e]));
 
     const names = new Set([...oldMap.keys(), ...newMap.keys()]);
-    const igc=new IgnoreChecker(this);
+    const igc=await IgnoreChecker.init(this);
 
     for (const name of names) {
       const oldEnt = oldMap.get(name);
       const newEnt = newMap.get(name);
       const relPath = asPathInRepo(path.posix.join(prefix, name));
       const fullPath = path_typed.join(this.workingDir(), relPath);
-      if (igc.ignores(fullPath)) continue;
+      if (await igc.ignores(fullPath)) continue;
 
       if (oldEnt && !newEnt) {
         // 削除
@@ -531,7 +532,7 @@ export class Repo {
 
       if (entry.mode === '40000') {
         // ディレクトリ（tree）→ 再帰的に処理
-        await fs.promises.mkdir(outPath, { recursive: true });
+        await fs.mkdir(outPath, { recursive: true });
         await this.checkoutTreeToDir(entry.hash, outPath);
       } else if (entry.mode === '120000') {
         if (this.ignoreSymlink) continue;
@@ -541,20 +542,20 @@ export class Repo {
         }
         const link = content.toString('utf-8');
         console.log("checked out Symlink", link, outPath);
-        await fs.promises.symlink(link, outPath,"junction");
+        await fs.symlink(link, outPath,"junction");
       } else {
         // blob → ファイルとして書き出す
         const { type, content } = await this.readObject(entry.hash);
         if (type !== 'blob') {
           throw new Error(`Unexpected object type ${type} for ${entry.name}`);
         }
-        await fs.promises.writeFile(outPath, content);
+        await fs.writeFile(outPath, content);
       }
     }
   }
   async getCurrentBranchName(): Promise<BranchName> {
     const headPath = this.headPath();
-    const content = await fs.promises.readFile(headPath, 'utf8');
+    const content = await fs.readFile(headPath, 'utf8');
 
     const match = content.match(/^ref: refs\/heads\/(.+)\s*$/);
     if (match) {
@@ -566,51 +567,51 @@ export class Repo {
     }
   }
   headPath() {
-    return path.join(this.gitDir, 'HEAD');
+    return join(this.gitDir, 'HEAD');
   }
 
   async setCurrentBranchName(branch:BranchName): Promise<void> {
     const headPath = this.headPath();
     const refPath = asLocalRef(branch);
     const content = `ref: ${refPath}\n`;
-    await fs.promises.writeFile(headPath, content, 'utf8');
+    await fs.writeFile(headPath, content, 'utf8');
 
   }
   async readMergeHead():Promise<Hash|null>{
-    const MERGE_HEAD=path.join(this.gitDir, "MERGE_HEAD");
-    if (!fs.existsSync(MERGE_HEAD)) return null;
-    return asHash(await fs.promises.readFile(MERGE_HEAD, {encoding:"utf-8"}));
+    const MERGE_HEAD=join(this.gitDir, "MERGE_HEAD");
+    if (!await exists(MERGE_HEAD)) return null;
+    return asHash(await fs.readFile(MERGE_HEAD, {encoding:"utf-8"}));
   }
   async writeMergeHead(commitHash?: Hash) {
     const MERGE_HEAD=path.join(this.gitDir, "MERGE_HEAD");
     if (commitHash) {
-      await fs.promises.writeFile(MERGE_HEAD, commitHash);
+      await fs.writeFile(MERGE_HEAD, commitHash);
     } else {
-      await fs.promises.rm(MERGE_HEAD);
+      await fs.rm(MERGE_HEAD);
     }
   }
   realGitRepoIsSubRepo():boolean{
     return false;// TODO: configure
   }
-  isSubRepo(dir:FilePath):boolean {
+  async isSubRepo(dir:FilePath):Promise<boolean> {
     if (!this.inWorkingDir(dir)) return false;
     const dot_gsync=path.basename(this.gitDir);
-    return (this.realGitRepoIsSubRepo() && fs.existsSync(path.join(dir, ".git"))) || 
-          fs.existsSync(path.join(dir, dot_gsync));
+    return (this.realGitRepoIsSubRepo() && await exists(join(dir, ".git"))) || 
+          await exists(join(dir, dot_gsync));
   }
-  inSubRepo(_path:FilePath):boolean {
+  async inSubRepo(_path:FilePath):Promise<boolean> {
     if (!this.inWorkingDir(_path)) return false;
     const workDir=this.workingDir();
     for(;
         path.normalize(workDir)!==path.normalize(_path);
         _path=asFilePath(path.dirname(_path))) {
-        if (this.isSubRepo(_path))return true;
+        if (await this.isSubRepo(_path))return true;
       }
       return false;     
   }
   async applyDiff(diffs: TreeDiffEntry[]): Promise<void> {
     const workDir = this.workingDir();
-    const igc=new IgnoreChecker(this);
+    const igc=await IgnoreChecker.init(this);
     for (const diff of diffs) {
       const filePath = asFilePath(path.join(workDir, diff.path));
       const filePathParent= asFilePath(path.dirname(filePath));
@@ -618,10 +619,10 @@ export class Repo {
       if (await this.hasSymlinkInPath(filePathParent)) {
         continue;
       }
-      if (igc.ignores(filePath)) continue;
-      if (this.inSubRepo(asFilePath(path.dirname(filePath))))continue;
+      if (await igc.ignores(filePath)) continue;
+      if (await this.inSubRepo(asFilePath(path.dirname(filePath))))continue;
       if (diff.type === 'deleted') {
-        await fs.promises.rm(filePath, { force: true });
+        await fs.rm(filePath, { force: true });
       } else if (diff.type === 'added' || diff.type === 'modified') {
         await splashScreen.show("Write "+filePath);
         if (!diff.newHash) throw new Error(`Missing 'other' hash for ${diff.path}`);
@@ -634,7 +635,7 @@ export class Repo {
             target: linkTarget,
             path: filePath
           });
-          await fs.promises.symlink(linkTarget, filePath);
+          await fs.symlink(linkTarget, filePath);
           //console.log("Writing symlink into ",filePath);
           //await fs.promises.symlink(content, filePath, "junction");
         } else {
@@ -653,7 +654,7 @@ export class Repo {
       if (part=="..")throw new Error(`${rel}(${targetPath}) is out of this repo.`);
       current = asFilePath(path.join(current, part));
       try {
-        const stat = await fs.promises.lstat(current);
+        const stat = await fs.lstat(current);
         if (stat.isSymbolicLink()) {
           return true;
         }
@@ -666,39 +667,45 @@ export class Repo {
   }
 }
 export async function writeFileIgnoreingCRLF(filePath: FilePath, content:Buffer) {
-  if (fs.existsSync(filePath)) {
-    const org=await fs.promises.readFile(filePath); 
+  if (await exists(filePath)) {
+    const org=await fs.readFile(filePath); 
     if (sameExceptCRLF(org,content)) return;
   }
-  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.promises.writeFile(filePath, content);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, content);
 }
 export class IgnoreChecker {
   igs=new Map<FilePath, RecursiveGitIgnore>;
   baseig: Ignore;
-  constructor(public repo:Repo) {
+  static async init(repo:Repo) {
+    const res=new IgnoreChecker(repo);
     const workingDir = repo.workingDir();
-    this.igs.set(workingDir,new RecursiveGitIgnore().pushed(workingDir));
+    res.igs.set(workingDir,await (new RecursiveGitIgnore().pushed(workingDir)));
+    return res;
+  }
+  private constructor(public repo:Repo) {
+    //const workingDir = repo.workingDir();
+    //this.igs.set(workingDir,new RecursiveGitIgnore().pushed(workingDir));
     const dot_gsync=path.basename(repo.gitDir);
     this.baseig=ignore();
     this.baseig.add(".git");
     this.baseig.add(dot_gsync);
   }
-  get(dir:FilePath):RecursiveGitIgnore {
+  async get(dir:FilePath):Promise<RecursiveGitIgnore> {
     if (!this.repo.inWorkingDir(dir)) throw new Error(`${dir} is out of working dir ${this.repo.workingDir()}`);
     if (this.igs.has(dir)) {
       return this.igs.get(dir)!;
     }
     const parent=path_typed.dirname(dir);
-    const r=this.get(parent).pushed(dir);
+    const r=await (await this.get(parent)).pushed(dir);
     this.igs.set(dir,r);
     return r;
   }
-  ignores(file:FilePath):boolean{
+  async ignores(file:FilePath):Promise<boolean>{
     const rel=path.relative(this.repo.workingDir(), file);
     if (this.baseig.ignores(rel)) return true;
     const dir=path_typed.dirname(file);
-    const ig=this.get(dir); 
+    const ig=await this.get(dir); 
     return ig.ignores(file);
   }
 }
@@ -719,12 +726,12 @@ export class RecursiveGitIgnore{
     }
     return false; // デフォルトは無視しない
   }
-  pushed(dir:FilePath):RecursiveGitIgnore{
+  async pushed(dir:FilePath):Promise<RecursiveGitIgnore>{
     const ig=ignore();
     // .gitignore を読み込む（存在する場合）
     const gitignorePath = path.join(dir, '.gitignore');
     try {
-      const ignoreContent = fs.readFileSync(gitignorePath, 'utf8');
+      const ignoreContent = await fs.readFile(gitignorePath, 'utf8');
       ig.add(ignoreContent);
     } catch {
       // .gitignore がない場合は無視
@@ -732,7 +739,7 @@ export class RecursiveGitIgnore{
     return new RecursiveGitIgnore([...this.stack, {ig,dir}]);
     //this.stack.push({ig, dir});
   }
-  poped():RecursiveGitIgnore{
+  async poped():Promise<RecursiveGitIgnore>{
     return new RecursiveGitIgnore(this.stack.slice(0,this.stack.length-1));
     //this.stack.pop();
   }
