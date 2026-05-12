@@ -1,4 +1,4 @@
-import path from "path";
+import * as path from "path";
 import { asFilePath, asPHPTimestamp, FilePath, PHPTimestamp } from "./types.js";
 import {promises as fs} from "fs";
 export function toBase64(content: Uint8Array<ArrayBufferLike>): string {
